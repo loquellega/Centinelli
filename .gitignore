@@ -1,0 +1,11 @@
+# configuraciones reales (tienen contraseñas y tokens)
+servidor/config.php
+agente/config.json
+# datos de las instalaciones
+servidor/data/*
+!servidor/data/.htaccess
+# trabajo
+*.log
+__pycache__/
+.DS_Store
+*.zip

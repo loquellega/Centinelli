@@ -1,0 +1,29 @@
+{
+  "id": "sala-isadora",
+  "name": "Instalación Isadora · Sala 2",
+  "server": "https://hectorcruz.com.mx/centinelli/api.php",
+  "token": "CAMBIA-ESTE-TOKEN-por-el-de-config.php",
+
+  "interval": 30,
+  "command_poll": 10,
+
+  "app": {
+    "process": "Isadora.exe",
+    "launch": ["C:/Program Files/TroikaTronix/Isadora/Isadora.exe", "C:/instalacion/pieza.izz"],
+    "start_on_boot": true,
+    "autorestart": true,
+    "restart_grace": 90,
+    "max_restarts_per_hour": 6
+  },
+
+  "osc": {
+    "listen_port": 9300,
+    "heartbeat_timeout": 15,
+    "heartbeat_required": true,
+    "heartbeat_is_fps": false,
+    "app_host": "127.0.0.1",
+    "app_port": 1234
+  },
+
+  "screenshot": { "enabled": true, "every": 60, "width": 480, "quality": 60 }
+}

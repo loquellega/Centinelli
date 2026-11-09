@@ -1,0 +1,36 @@
+{
+  "id": "resolume-fachada",
+  "name": "Resolume Arena · Fachada",
+  "server": "https://hectorcruz.com.mx/centinelli/api.php",
+  "token": "CAMBIA-ESTE-TOKEN-por-el-de-config.php",
+
+  "interval": 30,
+  "command_poll": 10,
+
+  "app": {
+    "process": "Arena.exe",
+    "launch": ["C:/Program Files/Resolume Arena/Arena.exe"],
+    "start_on_boot": true,
+    "autorestart": true,
+    "restart_grace": 90,
+    "max_restarts_per_hour": 6
+  },
+
+  "http_heartbeat": {
+    "url": "http://127.0.0.1:8080/api/v1/composition",
+    "every": 5,
+    "timeout": 4,
+    "resolume": true
+  },
+
+  "osc": {
+    "listen_port": 9300,
+    "heartbeat_timeout": 20,
+    "heartbeat_required": true,
+    "heartbeat_is_fps": false,
+    "app_host": "127.0.0.1",
+    "app_port": 7000
+  },
+
+  "screenshot": { "enabled": true, "every": 60, "width": 480, "quality": 60 }
+}

@@ -1,0 +1,35 @@
+{
+  "id": "ofdcm-lobby",
+  "name": "Experiencia OFDCM · Lobby",
+  "server": "https://hectorcruz.com.mx/centinelli/api.php",
+  "token": "CAMBIA-ESTE-TOKEN-por-el-de-config.php",
+
+  "interval": 30,
+  "command_poll": 10,
+
+  "app": {
+    "process": "TouchDesigner.exe",
+    "launch": ["C:/Program Files/Derivative/TouchDesigner/bin/TouchDesigner.exe", "C:/instalacion/juego.toe"],
+    "cwd": "C:/instalacion",
+    "start_on_boot": true,
+    "autorestart": true,
+    "restart_grace": 60,
+    "max_restarts_per_hour": 6
+  },
+
+  "osc": {
+    "listen_port": 9300,
+    "heartbeat_timeout": 15,
+    "heartbeat_required": true,
+    "app_host": "127.0.0.1",
+    "app_port": 9301
+  },
+
+  "screenshot": {
+    "enabled": true,
+    "every": 60,
+    "monitor": 0,
+    "width": 480,
+    "quality": 60
+  }
+}
