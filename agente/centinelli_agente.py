@@ -48,7 +48,7 @@ try:
 except ImportError:
     HAS_SCREEN = False
 
-VERSION = "0.3"
+VERSION = "0.4"
 
 
 # ───────────────────────────── OSC mínimo (sin dependencias) ─────────────────────────────
@@ -152,6 +152,26 @@ class Centinelli:
         # (p.ej. pedir al TouchDesigner maestro que vuelva a sincronizar los Resolume)
         self.on_restart = cfg.get("al_reiniciar") or {}
         self.on_restart_at = 0.0
+        # Reiniciar la computadora desde el dashboard: apagado salvo que se pida explícitamente
+        self.allow_reboot = bool(cfg.get("permitir_reinicio_pc", False))
+        # Sala: varios servidores (p.ej. 5 Resolume) que se sincronizan entre sí por OSC,
+        # sin TouchDesigner. Cualquier agente de la sala puede mandar la secuencia a todos.
+        self.sala = cfg.get("sala") or {}
+        self.sala_ips = [str(x).strip() for x in self.sala.get("servidores", []) if str(x).strip()]
+        self.sala_port = int(self.sala.get("puerto", 7000))
+        self.sala_seq = self.sala.get("secuencia") or [
+            {"address": "/composition/disconnectall", "args": [1]},
+            {"pausa": 1},
+            {"address": "/composition/columns/2/connect", "args": [1]},
+            {"pausa": 1},
+            {"address": "/composition/columns/1/connect", "args": [1]},
+        ]
+        self.sala_buttons = [b for b in self.sala.get("botones", []) if isinstance(b, dict) and b.get("address")]
+        self.sala_sync_at = 0.0          # sincronización programada (tras arrancar o reabrir la app)
+        self.sala_sync_why = ""
+        self.sala_busy = threading.Lock()
+        self.sala_last_sched = ""        # última hora programada ya ejecutada (HH:MM de hoy)
+        self.t0 = time.time()
         self.app_host = osc.get("app_host", "127.0.0.1")
         self.app_port = osc.get("app_port", 9301)
 
@@ -244,12 +264,16 @@ class Centinelli:
             vals["bpm"] = round(bpm, 1)
         layers = c.get("layers") or []
         vivos = []
+        cols = set()
         for i, layer in enumerate(layers, 1):
-            for clip in layer.get("clips") or []:
+            for j, clip in enumerate(layer.get("clips") or [], 1):
                 if val(clip, "connected") in ("Connected", "Connected & previewing"):
                     vivos.append(f"L{i}:{val(clip, 'name') or '?'}")
+                    cols.add(j)
         if layers:
             vals["clips"] = " · ".join(vivos) if vivos else "ninguno"
+            # columna activa: la del clip conectado (si hay clips en varias columnas, todas)
+            vals["columna"] = "–" if not cols else ",".join(str(x) for x in sorted(cols))
         with self.lock:
             self.app_values.update(vals)
 
@@ -273,6 +297,66 @@ class Centinelli:
                 self.event("info", f"{motivo}: OSC {m['address']} {m.get('args', [])} → {dest}")
             except Exception as e:
                 self.event("error", f"{motivo}: no se pudo mandar {m.get('address')}: {e}")
+
+    # ── sala: sincronización directa de varios servidores ──
+    def sala_send(self, address, args=()):
+        """Manda un OSC a TODOS los servidores de la sala. Devuelve (ok, fallos)."""
+        fallos = []
+        for ip in self.sala_ips:
+            try:
+                self.osc_send(address, args, ip, self.sala_port)
+            except Exception:
+                fallos.append(ip)
+        return len(self.sala_ips) - len(fallos), fallos
+
+    def sala_sync(self, origen):
+        """Corre la secuencia de sincronización (en su propio hilo para no frenar al agente)."""
+        if not self.sala_ips:
+            self.event("warn", "Sincronizar sala: no hay servidores en sala.servidores")
+            return
+        def correr():
+            if not self.sala_busy.acquire(blocking=False):
+                self.event("warn", "Ya hay una sincronización en curso; ignoro la nueva")
+                return
+            try:
+                n = len(self.sala_ips)
+                self.event("info", f"Sala: sincronización iniciada ({origen}) → {n} servidores")
+                todo_ok = True
+                for paso in self.sala_seq:
+                    if "pausa" in paso:
+                        time.sleep(float(paso["pausa"]))
+                        continue
+                    ok, fallos = self.sala_send(paso["address"], paso.get("args", [1]))
+                    if fallos:
+                        todo_ok = False
+                        self.event("warn", f"Sala: {paso['address']} → {ok}/{n} (fallaron: {', '.join(fallos)})")
+                hora = time.strftime("%H:%M:%S")
+                with self.lock:
+                    self.app_values["sync"] = hora
+                self.event("info" if todo_ok else "warn",
+                           f"Sala: sincronización completa a las {hora} ({origen})")
+            finally:
+                self.sala_busy.release()
+        threading.Thread(target=correr, daemon=True).start()
+
+    def sala_schedule(self, segundos, why):
+        if self.sala_ips and segundos and float(segundos) > 0:
+            self.sala_sync_at = time.time() + float(segundos)
+            self.sala_sync_why = why
+            self.event("info", f"Sala: sincronización programada en {int(float(segundos))} s ({why})")
+
+    def sala_tick(self):
+        now = time.time()
+        if self.sala_sync_at and now >= self.sala_sync_at:
+            self.sala_sync_at = 0.0
+            self.sala_sync(self.sala_sync_why)
+        # horarios fijos (sólo el coordinador), p.ej. ["09:55", "14:00"]
+        if self.sala.get("coordinador"):
+            hhmm = time.strftime("%H:%M")
+            clave = time.strftime("%Y-%m-%d ") + hhmm
+            if hhmm in self.sala.get("sync_horarios", []) and self.sala_last_sched != clave:
+                self.sala_last_sched = clave
+                self.sala_sync(f"horario {hhmm}")
 
     # ── proceso ──
     def find_procs(self):
@@ -304,6 +388,8 @@ class Centinelli:
             self.last_launch = time.time()
             if self.on_restart.get("mensajes"):
                 self.on_restart_at = self.last_launch + float(self.on_restart.get("espera", 60))
+            if reason != "al arrancar el agente":
+                self.sala_schedule(self.sala.get("sync_al_reiniciar", 0), "la app se reabrió aquí")
             self.last_beat = 0.0
             self.event("info", f"App iniciada {reason}".strip())
         except Exception as e:
@@ -464,6 +550,19 @@ class Centinelli:
                     raise ValueError("dirección OSC inválida")
                 self.osc_send(addr, vals)
                 self.event("info", f"OSC enviado a la app: {addr} {vals}")
+            elif t == "sala_sync":
+                self.sala_sync("dashboard")
+            elif t == "sala_boton":
+                i = int(args.get("i", -1))
+                if not 0 <= i < len(self.sala_buttons):
+                    raise ValueError("botón de sala inexistente")
+                b = self.sala_buttons[i]
+                ok, fallos = self.sala_send(b["address"], b.get("args", [1]))
+                self.event("info" if not fallos else "warn",
+                           f"Sala: «{b.get('label', b['address'])}» → {ok}/{len(self.sala_ips)} servidores"
+                           + (f" (fallaron: {', '.join(fallos)})" if fallos else ""))
+            elif t == "reboot" and not self.allow_reboot:
+                raise PermissionError("reiniciar la PC está desactivado en esta máquina (permitir_reinicio_pc)")
             elif t == "reboot":
                 self.event("warn", "Reiniciando la computadora (pedido desde el dashboard)")
                 self.report()  # avisa antes de irse
@@ -505,6 +604,12 @@ class Centinelli:
             "beat_age": round(beat_age, 1) if beat_age is not None else None,
             "metrics": self.metrics(procs),
             "values": values,
+            "allow_reboot": self.allow_reboot,
+            "sala": ({"id": self.sala.get("id", "sala"), "nombre": self.sala.get("nombre", self.sala.get("id", "sala")),
+                      "coordinador": bool(self.sala.get("coordinador")), "servidores": len(self.sala_ips),
+                      "botones": [b.get("label", b["address"]) for b in self.sala_buttons],
+                      "horarios": self.sala.get("sync_horarios", [])}
+                     if self.sala_ips else None),
             "buttons": [{"label": b.get("label", b["address"]), "confirm": bool(b.get("confirmar"))}
                         for b in self.buttons],
             "events": events,
@@ -543,11 +648,14 @@ class Centinelli:
         self.event("info", f"Centinelli {VERSION} iniciado en {socket.gethostname()}")
         if self.cfg.get("app", {}).get("start_on_boot") and not self.find_procs():
             self.start_app("al arrancar el agente")
+        if self.sala.get("coordinador"):
+            self.sala_schedule(self.sala.get("sync_al_arrancar", 0), "arranque de la sala")
         interval = self.cfg.get("interval", 30)
         poll = self.cfg.get("command_poll", 10)  # cada cuánto pregunta si hay comandos
         last_report = 0
         last_state = None
         while True:
+            self.sala_tick()
             if self.on_restart_at and time.time() >= self.on_restart_at:
                 self.on_restart_at = 0.0
                 self.send_list(self.on_restart.get("mensajes", []), "Tras reabrir la app")

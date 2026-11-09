@@ -1,4 +1,6 @@
-# Sincronización de varios Resolume con Centinelli
+# Sincronización de varios Resolume con TouchDesigner como maestro
+
+> **Desde la v0.4 ya no hace falta TouchDesigner:** Centinelli sincroniza los Resolume directamente. Ver [SALA.md](SALA.md). Esta guía queda para montajes donde un TouchDesigner ya es el maestro del show.
 
 Escenario típico: varias máquinas con Resolume Arena (fachada, pantallas, proyectores) y una máquina con TouchDesigner que las sincroniza por OSC. Envía Detener todo, luego Columna 2 y luego Columna 1 a todas las IPs, con el script `touchdesigner/resolume_sync_v3.py`.
 

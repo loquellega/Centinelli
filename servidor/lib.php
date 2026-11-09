@@ -132,6 +132,50 @@ function notify($text) {
     }
 }
 
+function queue_cmd($id, $type, $args) {
+    $cmd = ['id' => bin2hex(random_bytes(6)), 'type' => $type, 'args' => $args,
+            'status' => 'pendiente', 'created' => time()];
+    jupdate(DATA . "/$id/cmds.json", function ($c) use ($cmd) { $c[] = $cmd; return array_slice($c, -30); });
+    return $cmd;
+}
+
+// Salas: agentes que reportan el mismo sala.id
+function salas($items = null) {
+    $out = [];
+    foreach ($items ?? array_map(fn($id) => jread(DATA . "/$id/state.json") + ['id' => $id], list_ids()) as $st) {
+        $s = $st['sala'] ?? null;
+        if (!is_array($s) || empty($s['id'])) continue;
+        $sid = (string)$s['id'];
+        $out[$sid] ??= ['id' => $sid, 'nombre' => $s['nombre'] ?? $sid, 'miembros' => [], 'coordinador' => null,
+                        'botones' => [], 'horarios' => []];
+        $out[$sid]['miembros'][] = $st['id'];
+        if (!empty($s['coordinador'])) {
+            $out[$sid]['coordinador'] = $st['id'];
+            $out[$sid]['botones'] = $s['botones'] ?? [];
+            $out[$sid]['horarios'] = $s['horarios'] ?? [];
+        } elseif (!$out[$sid]['botones']) {
+            $out[$sid]['botones'] = $s['botones'] ?? [];
+        }
+    }
+    return $out;
+}
+
+// Elige qué agente manda la secuencia: el coordinador si está en línea; si no, el que reportó más reciente
+function pick_sala_agent($sala) {
+    $s = salas()[$sala] ?? null;
+    if (!$s) return null;
+    $cands = [];
+    foreach ($s['miembros'] as $id) {
+        $st = jread(DATA . "/$id/state.json");
+        if (isset(problems($st)['offline'])) continue;
+        $cands[$id] = $st['last_seen'] ?? 0;
+    }
+    if (!$cands) return null;
+    if ($s['coordinador'] && isset($cands[$s['coordinador']])) return $s['coordinador'];
+    arsort($cands);
+    return array_key_first($cands);
+}
+
 function log_event($id, $e) {
     jupdate(inst_dir($id) . '/events.json', function ($ev) use ($e) {
         $ev[] = $e;

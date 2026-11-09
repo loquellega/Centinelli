@@ -1,15 +1,40 @@
 <?php
-// Centinelli · encola un comando para una instalación (desde el dashboard)
+// Centinelli · encola un comando para una instalación o para una sala (desde el dashboard)
 require __DIR__ . '/lib.php';
 require_login();
 require_csrf();
 
 $in = json_decode(file_get_contents('php://input'), true) ?: [];
-$id = $in['id'] ?? '';
 $type = $in['type'] ?? '';
+
+// ── comandos de sala: se encargan a un agente de la sala que esté en línea ──
+if ($type === 'sala_sync' || $type === 'sala_boton') {
+    $sala = (string)($in['sala'] ?? '');
+    $id = pick_sala_agent($sala);
+    if (!$id) json_out(['error' => 'ningún servidor de la sala está en línea'], 409);
+    $args = [];
+    $label = 'Sincronizar sala';
+    if ($type === 'sala_boton') {
+        $i = (int)($in['i'] ?? -1);
+        $st = jread(DATA . "/$id/state.json");
+        $bot = $st['sala']['botones'] ?? [];
+        if ($i < 0 || $i >= count($bot)) json_out(['error' => 'botón'], 400);
+        $label = (string)$bot[$i];
+        $args = ['i' => $i, 'label' => $label];
+    }
+    $cmd = queue_cmd($id, $type, $args);
+    $st = jread(DATA . "/$id/state.json");
+    log_event($id, ['t' => time(), 'level' => 'dash', 'msg' => "Sala: «{$label}» encargado a esta máquina"]);
+    json_out(['ok' => true, 'cmd' => $cmd, 'agente' => $id, 'nombre' => $st['name'] ?? $id]);
+}
+
+// ── comandos de una instalación ──
+$id = $in['id'] ?? '';
 $allowed = ['restart_app', 'stop_app', 'start_app', 'screenshot', 'reboot', 'osc', 'boton'];
 if (!valid_id($id) || !is_file(DATA . "/$id/state.json")) json_out(['error' => 'instalación'], 404);
 if (!in_array($type, $allowed, true)) json_out(['error' => 'comando'], 400);
+$st = jread(DATA . "/$id/state.json");
+if ($type === 'reboot' && empty($st['allow_reboot'])) json_out(['error' => 'reiniciar la PC está desactivado en esa máquina'], 403);
 
 $args = [];
 if ($type === 'osc') {
@@ -21,17 +46,13 @@ if ($type === 'osc') {
     }
     $args = ['address' => $addr, 'args' => array_slice($vals, 0, 16)];
 }
-
 if ($type === 'boton') {
     $i = (int)($in['i'] ?? -1);
-    $st = jread(DATA . "/$id/state.json");
     if ($i < 0 || $i >= count($st['buttons'] ?? [])) json_out(['error' => 'botón'], 400);
     $args = ['i' => $i, 'label' => (string)$st['buttons'][$i]['label']];
 }
 
-$cmd = ['id' => bin2hex(random_bytes(6)), 'type' => $type, 'args' => $args,
-        'status' => 'pendiente', 'created' => time()];
-jupdate(DATA . "/$id/cmds.json", function ($c) use ($cmd) { $c[] = $cmd; return array_slice($c, -30); });
+$cmd = queue_cmd($id, $type, $args);
 $detalle = $type === 'osc' ? ' ' . $args['address'] . ' ' . implode(' ', $args['args']) : ($type === 'boton' ? ' «' . $args['label'] . '»' : '');
 log_event($id, ['t' => time(), 'level' => 'dash', 'msg' => "Comando: $type$detalle"]);
 json_out(['ok' => true, 'cmd' => $cmd]);

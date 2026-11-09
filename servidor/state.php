@@ -15,4 +15,4 @@ foreach (list_ids() as $id) {
     $st['has_thumb'] = is_file("$d/thumb.jpg");
     $out[] = $st;
 }
-json_out(['now' => $now, 'items' => $out]);
+json_out(['now' => $now, 'items' => $out, 'salas' => array_values(salas($out))]);

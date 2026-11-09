@@ -1,0 +1,60 @@
+{
+  "id": "mhn-srv1",
+  "name": "MHN Server 1",
+  "server": "https://hectorcruz.com.mx/centinelli/api.php",
+  "token": "CAMBIA-ESTE-TOKEN-por-el-de-config.php",
+
+  "interval": 30,
+  "command_poll": 5,
+
+  "app": {
+    "process": "Arena.exe",
+    "launch": ["C:/Program Files/Resolume Arena/Arena.exe"],
+    "start_on_boot": true,
+    "autorestart": true,
+    "restart_grace": 90,
+    "max_restarts_per_hour": 6
+  },
+
+  "http_heartbeat": {
+    "url": "http://127.0.0.1:8080/api/v1/composition",
+    "every": 5,
+    "timeout": 4,
+    "resolume": true
+  },
+
+  "osc": {
+    "listen_port": 9300,
+    "heartbeat_timeout": 20,
+    "heartbeat_is_fps": false,
+    "app_host": "127.0.0.1",
+    "app_port": 7000
+  },
+
+  "sala": {
+    "id": "mhn-inmersiva",
+    "nombre": "MHN · Sala inmersiva",
+    "servidores": ["192.168.1.11", "192.168.1.12", "192.168.1.13", "192.168.1.14", "192.168.1.15"],
+    "puerto": 7000,
+    "coordinador": true,
+    "sync_al_arrancar": 120,
+    "sync_al_reiniciar": 70,
+    "sync_horarios": [],
+    "secuencia": [
+      {"address": "/composition/disconnectall", "args": [1]},
+      {"pausa": 1},
+      {"address": "/composition/columns/2/connect", "args": [1]},
+      {"pausa": 1},
+      {"address": "/composition/columns/1/connect", "args": [1]}
+    ],
+    "botones": [
+      {"label": "Columna 1", "address": "/composition/columns/1/connect", "args": [1]},
+      {"label": "Columna 2", "address": "/composition/columns/2/connect", "args": [1]},
+      {"label": "Negro", "address": "/composition/disconnectall", "args": [1]}
+    ]
+  },
+
+  "permitir_reinicio_pc": false,
+
+  "screenshot": { "enabled": true, "every": 60, "width": 480, "quality": 60 }
+}

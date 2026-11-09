@@ -17,7 +17,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['p'])) {
     $err = $CFG['password_hash'] ? 'Contraseña incorrecta' : 'Falta configurar la contraseña (hash.php)';
 }
 $ok = logged_in();
-const VERSION = '0.3';
+const VERSION = '0.4';
 ?><!doctype html>
 <html lang="es">
 <head>
@@ -106,7 +106,7 @@ main{padding:var(--a-pad) max(var(--a-pad),env(safe-area-inset-right)) calc(56px
 .visor .cif{position:absolute;font-size:10px;line-height:1;color:#fff;mix-blend-mode:difference;letter-spacing:.03em}
 .visor .c-tl{left:20px;top:8px}.visor .c-tr{right:20px;top:8px;text-align:right}
 .visor .c-bl{left:20px;bottom:8px}.visor .c-br{right:20px;bottom:8px;text-align:right}
-.visor .vacio{position:absolute;inset:0;display:grid;place-items:center;color:var(--a-ink-dim);font-size:var(--a-size-sm)}
+.visor .vacio{position:absolute;inset:auto 0 30%;display:grid;place-items:center;color:var(--a-ink-dim);font-size:var(--a-size-sm)}
 
 .fallas{display:flex;flex-direction:column;gap:2px;color:var(--c-fail)}
 .fallas div::before{content:"▲ ";font-size:9px;vertical-align:1px}
@@ -128,6 +128,16 @@ main{padding:var(--a-pad) max(var(--a-pad),env(safe-area-inset-right)) calc(56px
 .log time{color:var(--a-ink-dim);margin-right:8px}
 .log .l-warn{color:var(--c-warn)}.log .l-error,.log .l-alerta{color:var(--c-fail)}
 .log .l-dash{color:var(--a-ink-strong)}.log .l-info,.log .l-app{color:var(--a-ink)}
+
+/* sala */
+.sala{grid-column:1/-1}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{display:inline-flex;align-items:center;gap:7px;padding:5px 9px;border:1px solid var(--a-line-ctl);border-radius:var(--a-radius-sm);background:var(--a-bg)}
+.sala-info{flex-wrap:wrap}
+.desf{color:var(--c-warn)}
+.sala-log{border-top:1px solid var(--a-line);max-height:none}
+.sala-log .a-lbl{margin-right:6px}
+.sep{grid-column:1/-1;color:var(--a-ink-dim);font-size:var(--a-size-sm);padding:6px 2px 0;border-top:1px solid var(--a-line)}
 
 /* modo mural (h): sólo visor y estado */
 body.mural .ctl{display:none}
@@ -189,7 +199,7 @@ const ESTADOS = {
   ok:['vivo','en marcha'], iniciando:['aviso','iniciando'], sin_latido:['falla','sin latido'],
   caida:['falla','app caída'], pausada:['','detenida'], offline:['falla','sin conexión']
 };
-let serverNow = 0, data = [];
+let serverNow = 0, data = [], salas = [];
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const hace = t => { if(!t) return '—'; const s = Math.max(0, serverNow - t);
@@ -204,7 +214,7 @@ async function load(){
   try{
     const r = await fetch('state.php', {cache:'no-store'});
     if (r.status === 401) { location.reload(); return; }
-    const j = await r.json(); serverNow = j.now; data = j.items; render();
+    const j = await r.json(); serverNow = j.now; data = j.items; salas = j.salas || []; render();
   }catch(e){ $('#sum').textContent = 'sin conexión con el servidor'; }
 }
 
@@ -253,7 +263,7 @@ function tarjeta(it){
         <button class="a-btn" onclick="cmd('${id}','restart_app')">reiniciar app</button>
         ${it.paused ? `<button class="a-btn primary" onclick="cmd('${id}','start_app')">iniciar</button>` : `<button class="a-btn" onclick="cmd('${id}','stop_app','¿Detener la app? El reinicio automático queda en pausa.')">detener</button>`}
         <button class="a-btn" onclick="cmd('${id}','screenshot')">captura</button>
-        <button class="a-btn fail" onclick="cmd('${id}','reboot','¿Reiniciar la COMPUTADORA de «${esc(it.name||it.id)}»?')">reiniciar pc</button>
+        ${it.allow_reboot ? `<button class="a-btn fail" onclick="cmd('${id}','reboot','¿Reiniciar la COMPUTADORA de «${esc(it.name||it.id)}»?')">reiniciar pc</button>` : ''}
       </div>
       <div class="osc ctl">
         <input class="a-input" id="oa-${id}" value="${esc(oscA)}" placeholder="/direccion/osc" spellcheck="false" aria-label="Dirección OSC">
@@ -270,11 +280,61 @@ function tarjeta(it){
   </section>`;
 }
 
+function panelSala(s){
+  const miembros = s.miembros.map(id => data.find(d => d.id === id)).filter(Boolean);
+  const vivos = miembros.filter(m => !Object.keys(m.problems||{}).length && m.state === 'ok');
+  const enLinea = miembros.filter(m => !(m.problems||{}).offline);
+  const todos = vivos.length === miembros.length;
+  // columnas activas (Resolume) de los que están en línea
+  const cols = {};
+  enLinea.forEach(m => { const c = (m.values||{}).columna; if (c !== undefined) (cols[c] ??= []).push(m.name || m.id); });
+  const ck = Object.keys(cols);
+  let colTxt = '';
+  if (ck.length === 1) colTxt = `<span class="a-lbl">columna</span> <span class="a-val">${esc(ck[0])}</span> <span class="a-lbl">en todos</span>`;
+  else if (ck.length > 1) {
+    const mayor = ck.sort((a,b) => cols[b].length - cols[a].length)[0];
+    const fuera = ck.filter(c => c !== mayor).map(c => `${cols[c].map(esc).join(', ')} en ${esc(c)}`).join(' · ');
+    colTxt = `<span class="desf">▲ desfase: ${fuera} (el resto en columna ${esc(mayor)})</span>`;
+  }
+  const desfase = ck.length > 1;
+  const syncs = miembros.map(m => (m.values||{}).sync).filter(Boolean).sort();
+  const ev = miembros.flatMap(m => (m.events||[]).filter(e => /^Sala:/.test(e.msg)).map(e => ({...e, quien: m.name || m.id})))
+    .sort((a,b) => b.t - a.t).slice(0, 6);
+  const sid = esc(s.id);
+  return `<section class="a-win sala${todos?'':' falla'}" aria-label="Sala ${esc(s.nombre)}">
+    <div class="a-tb"><span class="tb-name">sala · ${esc(s.nombre)}</span>
+      <span class="st"><span class="dot ${!todos?'falla':(desfase?'aviso':'vivo')}"></span>${vivos.length}/${miembros.length} en marcha${desfase?' · desfase':''}</span></div>
+    <div class="a-wb">
+      <div class="chips">${miembros.map(m => {
+        const p = m.problems||{}; const k = p.offline ? 'offline' : m.state; const [cl, lb] = ESTADOS[k] || ['', k];
+        const c = (m.values||{}).columna;
+        return `<span class="chip"><span class="dot ${cl}"></span><span class="a-val">${esc(m.name||m.id)}</span>
+          <span class="a-lbl">${lb}${c!==undefined && !p.offline ? ' · col '+esc(c) : ''}${m.id===s.coordinador?' · coordina':''}</span></span>`; }).join('')}</div>
+      <div class="a-row sala-info"><span>${colTxt}</span>
+        <span><span class="a-lbl">última sync</span> <span class="a-val">${syncs.length ? esc(syncs[syncs.length-1]) : '—'}</span>
+        ${(s.horarios||[]).length ? ` · <span class="a-lbl">programada</span> <span class="a-val">${s.horarios.map(esc).join(' · ')}</span>` : ''}</span></div>
+      <div class="btns">
+        <button class="a-btn primary" onclick="salaCmd('${sid}','sala_sync',null,'¿Sincronizar los ${miembros.length} servidores de «${esc(s.nombre)}»? Todas las pantallas vuelven a empezar.')">sincronizar sala</button>
+        ${(s.botones||[]).map((b,i) => `<button class="a-btn cue" onclick="salaCmd('${sid}','sala_boton',${i},'¿Mandar «${esc(b)}» a toda la sala?')">${esc(b)}</button>`).join('')}
+      </div>
+      ${ev.length ? `<div class="log sala-log">${ev.map(e => `<div class="l-${esc(e.level)}"><time>${hora(e.t)}</time><span class="a-lbl">${esc(e.quien)}</span> ${esc(e.msg.replace(/^Sala: /,''))}</div>`).join('')}</div>` : ''}
+    </div>
+  </section>`;
+}
+
 function render(){
   if (document.activeElement && document.activeElement.tagName === 'INPUT') return;
   const g = $('#grid');
-  if (!data.length) g.innerHTML = '<div class="vacio-g">Ninguna instalación ha reportado todavía.<br>Arranca el agente en una máquina.</div>';
-  else g.innerHTML = data.map(tarjeta).join('');
+  if (!data.length) { g.innerHTML = '<div class="vacio-g">Ninguna instalación ha reportado todavía.<br>Arranca el agente en una máquina.</div>'; }
+  else {
+    const usados = new Set();
+    let html = '';
+    salas.forEach(s => { html += panelSala(s); s.miembros.forEach(id => { const it = data.find(d => d.id === id); if (it) { html += tarjeta(it); usados.add(id); } }); });
+    const sueltos = data.filter(d => !usados.has(d.id));
+    if (sueltos.length && salas.length) html += '<div class="sep">otras instalaciones</div>';
+    html += sueltos.map(tarjeta).join('');
+    g.innerHTML = html;
+  }
   const mal = data.filter(i => Object.keys(i.problems||{}).length).length;
   $('#sum').innerHTML = `<b>${data.length}</b> instalaci${data.length===1?'ón':'ones'} · ${mal ? `<b class="f">${mal} con fallas</b>` : 'todo en marcha'} · ${new Date().toLocaleTimeString('es-MX')}`;
   document.title = mal ? `(${mal}) Centinelli` : 'Centinelli';
@@ -284,6 +344,13 @@ async function send(body){
   const r = await fetch('cmd.php', {method:'POST', headers:{'Content-Type':'application/json','X-CSRF':CSRF}, body:JSON.stringify(body)});
   const j = await r.json().catch(()=>({}));
   if (j.ok) { toast('Enviado. La máquina lo recibe en su próximo reporte (≤10 s).'); setTimeout(load, 1500); }
+  else toast('Error: ' + (j.error || r.status));
+}
+async function salaCmd(sala, type, i, aviso){
+  if (aviso && !confirm(aviso)) return;
+  const r = await fetch('cmd.php', {method:'POST', headers:{'Content-Type':'application/json','X-CSRF':CSRF}, body:JSON.stringify({sala, type, i})});
+  const j = await r.json().catch(()=>({}));
+  if (j.ok) { toast('Encargado a «' + j.nombre + '». Se ejecuta en su próximo reporte (≤10 s).'); setTimeout(load, 1500); }
   else toast('Error: ' + (j.error || r.status));
 }
 function cmd(id, type, aviso){ if (aviso && !confirm(aviso)) return; send({id, type}); }

@@ -1,6 +1,6 @@
 # Centinelli · guía de instalación
 
-Versión 0.3. Sirve para saber desde el teléfono si cada instalación está viva, verla en una miniatura, recibir un aviso por Telegram si algo falla y reiniciarla a distancia.
+Versión 0.4. **¿Primera vez? Empieza por [PRUEBA-LOCAL.md](PRUEBA-LOCAL.md).** Sirve para saber desde el teléfono si cada instalación está viva, verla en una miniatura, recibir un aviso por Telegram si algo falla y reiniciarla a distancia.
 
 ```
  Máquina de la instalación                          Tu hosting PHP
@@ -33,7 +33,7 @@ Un problema se avisa sólo si dura más de 45 s, para no mandarte un mensaje por
 - `agente/`: va en cada máquina de instalación
 - `touchdesigner/`: script que construye el COMP `centinelli` dentro de tu .toe
 - `isadora/`: guía para armar el latido y los comandos en Isadora
-- `resolume/`: guía para Resolume Arena/Avenue (latido por su REST API, comandos por OSC) y `SINCRONIZACION.md` para varios Resolume sincronizados desde TouchDesigner
+- `resolume/`: guía para Resolume Arena/Avenue (latido por su REST API, comandos por OSC) `SALA.md` para sincronizar varios Resolume directamente desde Centinelli (sin TouchDesigner) y `SINCRONIZACION.md` para la variante con TouchDesigner como maestro
 
 ## 1. Servidor (una vez)
 
@@ -83,7 +83,11 @@ Ver `isadora/ISADORA.md`. Es una escena de fondo con Pulse Generator → Counter
 
 Ver `resolume/RESOLUME.md`. No necesita patch: el agente usa el REST API de Arena como latido y le manda comandos por OSC (puerto 7000). La tarjeta muestra la composición, el BPM y los clips conectados.
 
-## 6. Botones de cue y acciones al reiniciar
+## 6. Sala: varios Resolume sincronizados
+
+Varias máquinas con Arena se agrupan en una **sala** (bloque `sala` del `config.json`). Los agentes se mandan la secuencia de sincronización entre ellos: al encender (sólo el coordinador), cuando uno reabre Arena, a ciertas horas o con el botón del dashboard. No hace falta TouchDesigner. Guía completa en `resolume/SALA.md` y ejemplo en `agente/config.sala.json`.
+
+## 7. Botones de cue y acciones al reiniciar
 
 En el `config.json` de cada máquina puedes definir:
 
@@ -94,7 +98,7 @@ Ejemplos en `agente/config.resolume.json` y explicación completa en `resolume/S
 
 ## Lista para dejar una máquina sola
 
-- BIOS: **Restore on AC power loss → Power On**, para que encienda sola al volver la luz
+- BIOS (opcional): **Restore on AC power loss → Power On**, para que encienda sola al volver la luz. Si prefieres que la encienda el técnico de sala, déjalo apagado.
 - Windows: inicio de sesión automático (`netplwiz`), sin suspensión, pantalla nunca se apaga
 - Windows Update: horas activas que cubran el horario de la instalación, o actualizaciones pausadas durante la temporada
 - Desactiva notificaciones y el «Asistente de concentración»
@@ -106,12 +110,12 @@ Ejemplos en `agente/config.resolume.json` y explicación completa en `resolume/S
 
 - El dashboard pide contraseña y la sesión usa cookie httpOnly. Los comandos llevan token CSRF.
 - Los agentes se identifican con `agent_token`. Si una máquina se pierde, cambia el token en `config.php` y en las demás máquinas.
-- «Reiniciar PC» pide confirmación.
+- «Reiniciar PC» está **desactivado por defecto**: encender o reiniciar la computadora queda en manos del técnico de sala. Se activa por máquina con `"permitir_reinicio_pc": true`, y aun así pide confirmación.
 - El OSC In de TouchDesigner escucha en todas las interfaces de la red local. Si la red del lugar no es de confianza, quita del DAT `comandos` las acciones `par` y `pulse`, que son las más poderosas.
 
 ## Límites conocidos de esta versión
 
-- Probado de punta a punta (servidor PHP 8.3 + agente + apps simuladas, incluido un Resolume falso con su REST API): caída, congelamiento, tope de reinicios, comandos, OSC, alertas y desconexión. **El script de TouchDesigner, el patch de Isadora y la config de Resolume no se probaron dentro de esas apps.** Hay que revisarlos en tu máquina.
+- Probado de punta a punta (servidor PHP 8.3 + agente + apps simuladas, incluido un Resolume falso con su REST API): caída, congelamiento, tope de reinicios, comandos, OSC, alertas y desconexión. **El script de TouchDesigner, el patch de Isadora y la config de Resolume no se probaron dentro de esas apps.** La sala se probó con 5 Resolume simulados (arranque, reinicio de uno, coordinador caído, botones de sala y desfase). Hay que revisarlos en tu máquina.
 - En Windows, `psutil` no da la temperatura del CPU. La del GPU Nvidia sí sale, vía `nvidia-smi`.
 - En Mac, «Reiniciar PC» necesita permisos de `sudo` sin contraseña para `shutdown`.
 - La miniatura se toma cada 60 s, o al pulsar «captura».
