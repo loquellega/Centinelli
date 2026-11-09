@@ -1,6 +1,6 @@
 # Centinelli · guía de instalación
 
-Versión 0.2. Sirve para saber desde el teléfono si cada instalación está viva, verla en una miniatura, recibir un aviso por Telegram si algo falla y reiniciarla a distancia.
+Versión 0.3. Sirve para saber desde el teléfono si cada instalación está viva, verla en una miniatura, recibir un aviso por Telegram si algo falla y reiniciarla a distancia.
 
 ```
  Máquina de la instalación                          Tu hosting PHP
@@ -33,7 +33,7 @@ Un problema se avisa sólo si dura más de 45 s, para no mandarte un mensaje por
 - `agente/`: va en cada máquina de instalación
 - `touchdesigner/`: script que construye el COMP `centinelli` dentro de tu .toe
 - `isadora/`: guía para armar el latido y los comandos en Isadora
-- `resolume/`: guía para Resolume Arena/Avenue (latido por su REST API, comandos por OSC)
+- `resolume/`: guía para Resolume Arena/Avenue (latido por su REST API, comandos por OSC) y `SINCRONIZACION.md` para varios Resolume sincronizados desde TouchDesigner
 
 ## 1. Servidor (una vez)
 
@@ -83,6 +83,15 @@ Ver `isadora/ISADORA.md`. Es una escena de fondo con Pulse Generator → Counter
 
 Ver `resolume/RESOLUME.md`. No necesita patch: el agente usa el REST API de Arena como latido y le manda comandos por OSC (puerto 7000). La tarjeta muestra la composición, el BPM y los clips conectados.
 
+## 6. Botones de cue y acciones al reiniciar
+
+En el `config.json` de cada máquina puedes definir:
+
+- `botones`: botones con nombre en la tarjeta del dashboard («Sincronizar todo», «Columna 1», «Negro»…). Cada uno manda un OSC a la app o a otra IP de la red local.
+- `al_reiniciar`: mensajes OSC que el agente manda N segundos después de abrir la app. Sirve, por ejemplo, para pedir una resincronización.
+
+Ejemplos en `agente/config.resolume.json` y explicación completa en `resolume/SINCRONIZACION.md`.
+
 ## Lista para dejar una máquina sola
 
 - BIOS: **Restore on AC power loss → Power On**, para que encienda sola al volver la luz
@@ -108,10 +117,9 @@ Ver `resolume/RESOLUME.md`. No necesita patch: el agente usa el REST API de Aren
 - La miniatura se toma cada 60 s, o al pulsar «captura».
 - Dashboard: tecla `h` = modo mural (sólo visores y lecturas), `c` = contraste alto, `r` = recargar.
 
-## Ideas para la v0.3
+## Ideas para la v0.4
 
 - Integrarlo como módulo de hq
 - Temperatura del CPU en Windows con LibreHardwareMonitor
 - Horario: encender y apagar la app según la hora de apertura del museo
 - Historial de fps y temperatura en una gráfica de 24 h
-- Botones de cue con nombre por instalación, en lugar de escribir OSC a mano

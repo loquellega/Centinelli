@@ -26,9 +26,14 @@ Usa `agente/config.resolume.json` como base:
 | `/composition/columns/3/connect` | `1` | dispara la columna 3 |
 | `/composition/layers/1/clips/2/connect` | `1` | dispara el clip 2 de la capa 1 |
 | `/composition/layers/1/clear` | `1` | limpia la capa 1 |
-| `/composition/master` | `0.0`–`1.0` | master de la composición (`0` = negro) |
+| `/composition/master` | `0.0`–`1.0` | master de la composición |
+| `/composition/disconnectall` | `1` | apaga todos los clips (negro) |
 
 Las direcciones exactas de cualquier parámetro se ven en Arena con *Shortcuts ▸ Edit OSC*, haciendo clic sobre el control.
+
+## Botones y sincronización de varios Resolume
+
+Los comandos que uses seguido pueden ir como botones con nombre en la tarjeta (`botones` en el `config.json`). Si sincronizas varios Resolume desde TouchDesigner, ve **[SINCRONIZACION.md](SINCRONIZACION.md)**: cuando Centinelli reabre Arena en una máquina, esa máquina pide sola la resincronización de todas.
 
 ## Límites
 

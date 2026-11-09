@@ -4,7 +4,7 @@
 
 Centinelli vigila la computadora de una instalación mientras tú no estás. Sabe si la pieza sigue viva, la reinicia si se cae o se congela y te avisa por Telegram. Desde el teléfono puedes verla en miniatura y mandarle comandos.
 
-Versión 0.2 · prototipo · Colección Alchemy of Meaning (Alquimia del Significado)
+Versión 0.3 · prototipo · Colección Alchemy of Meaning (Alquimia del Significado)
 
 ![Dashboard](capturas/01-dashboard.png)
 
@@ -14,6 +14,8 @@ Versión 0.2 · prototipo · Colección Alchemy of Meaning (Alquimia del Signifi
 - **Detecta congelamientos.** La app manda un latido OSC; en Resolume, el agente consulta su REST API. Si el latido deja de llegar con la ventana abierta, el agente mata la app y la vuelve a abrir. Si se reinicia demasiadas veces en una hora, se detiene y te avisa.
 - **Reporta** fps, CPU, GPU, RAM, VRAM, temperatura, disco y los valores que mande la pieza (escena, jugadores; en Resolume: composición, BPM y clips conectados). Además manda una miniatura de la pantalla cada minuto.
 - **Recibe comandos** desde el dashboard: reiniciar la app o la PC, pedir una captura o mandar cualquier mensaje OSC a la pieza (cambiar de escena, disparar una columna de Arena).
+- **Botones de cue** por instalación («Sincronizar todo», «Columna 1», «Negro»), definidos en la máquina.
+- **Sincroniza varios Resolume.** Si Centinelli reabre Arena en un servidor, ese servidor pide al TouchDesigner maestro que vuelva a sincronizar a todos (ver [SINCRONIZACION.md](resolume/SINCRONIZACION.md)).
 - **Avisa** por Telegram o correo si una máquina pierde conexión, si la app falla más de 45 s o si el GPU se calienta. También avisa cuando se resuelve.
 - **No abre puertos.** La máquina sólo hace conexiones de salida por HTTPS, así que funciona detrás del firewall de museos y teatros.
 
@@ -21,12 +23,14 @@ Versión 0.2 · prototipo · Colección Alchemy of Meaning (Alquimia del Signifi
 |---|---|---|
 | ![móvil](capturas/02-movil.png) | ![mural](capturas/03-mural.png) | ![acceso](capturas/04-acceso.png) |
 
+![Botones de cue y bitácora de sincronización](capturas/06-botones-sync.png)
+
 ## Cómo está hecho
 
 ```
 agente/          Python (psutil): corre en cada máquina, vigila y reporta
 servidor/        PHP sin base de datos: API, dashboard, alertas (sube a cualquier hosting compartido)
-touchdesigner/   script que construye el COMP «centinelli» dentro del .toe
+touchdesigner/   script que construye el COMP «centinelli» + resolume_sync_v3 (sincronización de varios Arena)
 isadora/         guía: escena de fondo con latido OSC y comandos
 resolume/        guía y config: latido por REST API, comandos por OSC
 ```
@@ -57,7 +61,7 @@ Licencia GPL-3.0.
 
 Centinelli watches an installation computer while you are away. It knows whether the piece is still running, restarts it when it crashes or freezes, and alerts you on Telegram. From your phone you can see a thumbnail and send it commands.
 
-Version 0.2 · prototype · Alchemy of Meaning collection
+Version 0.3 · prototype · Alchemy of Meaning collection
 
 ### What it does
 
@@ -65,6 +69,8 @@ Version 0.2 · prototype · Alchemy of Meaning collection
 - **Detects freezes.** The app sends an OSC heartbeat; for Resolume, the agent polls its REST API. If the heartbeat stops while the window is still open, the agent kills and relaunches the app. After too many restarts in an hour it stops and alerts you.
 - **Reports** fps, CPU, GPU, RAM, VRAM, temperature, disk and any values the piece sends (scene, players; for Resolume: composition, BPM and connected clips). It also sends a screen thumbnail every minute.
 - **Takes commands** from the dashboard: restart the app or the PC, take a screenshot, or send any OSC message to the piece (change scene, trigger an Arena column).
+- **Cue buttons** per installation, defined on each machine.
+- **Keeps several Resolume servers in sync.** When Centinelli reopens Arena on one server, that server asks the TouchDesigner master to resync all of them.
 - **Alerts** by Telegram or email when a machine goes offline, the app fails for more than 45 s, or the GPU runs hot. It also tells you when the problem clears.
 - **Opens no ports.** The machine only makes outbound HTTPS requests, so it works behind museum and theatre firewalls.
 

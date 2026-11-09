@@ -17,7 +17,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['p'])) {
     $err = $CFG['password_hash'] ? 'Contraseña incorrecta' : 'Falta configurar la contraseña (hash.php)';
 }
 $ok = logged_in();
-const VERSION = '0.2';
+const VERSION = '0.3';
 ?><!doctype html>
 <html lang="es">
 <head>
@@ -113,9 +113,12 @@ main{padding:var(--a-pad) max(var(--a-pad),env(safe-area-inset-right)) calc(56px
 .lect{display:grid;grid-template-columns:repeat(4,1fr);gap:10px 12px}
 .lect .m{display:flex;flex-direction:column;gap:3px}
 .lect .m .a-row{align-items:baseline}
+.lect .a-val{white-space:nowrap}
 .vals{display:flex;flex-wrap:wrap;gap:3px 14px}
 .meta{color:var(--a-ink-dim);font-size:var(--a-size-sm)}
 .btns{display:flex;flex-wrap:wrap;gap:6px}
+.cues{display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:6px;padding-bottom:var(--a-pad);border-bottom:1px solid var(--a-line)}
+.cue{color:var(--a-ink-strong);border-color:#555}
 .osc{display:flex;gap:6px}
 .osc .a-input:first-child{flex:1.3}.osc .a-input:nth-child(2){flex:1}
 .bit summary{cursor:pointer;color:var(--a-ink-dim);font-size:var(--a-size-sm);list-style:none;display:flex;justify-content:space-between}
@@ -245,6 +248,7 @@ function tarjeta(it){
       </div>
       ${Object.keys(v).length ? `<div class="vals">${Object.entries(v).map(([k,x])=>`<span><span class="a-lbl">${esc(k)}</span> <span class="a-val">${esc(Array.isArray(x)?x.join(' '):x)}</span></span>`).join('')}</div>`:''}
       <div class="meta">${esc(it.os||'')}${it.agent? ' · agente '+esc(it.agent):''}</div>
+      ${(it.buttons||[]).length ? `<div class="cues ctl">${it.buttons.map((b,i)=>`<button class="a-btn cue" onclick="boton('${id}',${i},${b.confirm?1:0},this)">${esc(b.label)}</button>`).join('')}</div>`:''}
       <div class="btns ctl">
         <button class="a-btn" onclick="cmd('${id}','restart_app')">reiniciar app</button>
         ${it.paused ? `<button class="a-btn primary" onclick="cmd('${id}','start_app')">iniciar</button>` : `<button class="a-btn" onclick="cmd('${id}','stop_app','¿Detener la app? El reinicio automático queda en pausa.')">detener</button>`}
@@ -258,7 +262,7 @@ function tarjeta(it){
       </div>
       <details class="bit ctl" data-id="${id}" ${abierto}><summary>bitácora · comandos</summary>
         <div class="log a-scroll">
-          ${(it.cmds||[]).map(c=>`<div class="l-dash"><time>${hora(c.created)}</time>${esc(c.type)} → ${esc(c.status)}${c.result? ' ('+esc(c.result)+')':''}</div>`).join('')}
+          ${(it.cmds||[]).map(c=>`<div class="l-dash"><time>${hora(c.created)}</time>${esc(c.type==='boton' ? '«'+(c.args&&c.args.label||'')+'»' : c.type)} → ${esc(c.status)}${c.result? ' ('+esc(c.result)+')':''}</div>`).join('')}
           ${(it.events||[]).map(e=>`<div class="l-${esc(e.level)}"><time>${hora(e.t)}</time>${esc(e.msg)}</div>`).join('')}
         </div>
       </details>
@@ -283,6 +287,7 @@ async function send(body){
   else toast('Error: ' + (j.error || r.status));
 }
 function cmd(id, type, aviso){ if (aviso && !confirm(aviso)) return; send({id, type}); }
+function boton(id, i, conf, el){ if (conf && !confirm('¿Mandar «' + el.textContent + '»?')) return; send({id, type:'boton', i}); }
 function osc(id){ send({id, type:'osc', address:$('#oa-'+id).value.trim(), values:$('#ov-'+id).value}); }
 
 // preferencias de vista (por navegador)

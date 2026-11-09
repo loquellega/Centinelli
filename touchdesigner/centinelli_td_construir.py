@@ -93,6 +93,8 @@ cb.text = r'''# Comandos que llegan desde el dashboard (campo OSC de la tarjeta)
 #   /centinelli/cmd/par    /project1/miCOMP  Nombrepar  valor   → cambia un parámetro
 #   /centinelli/cmd/pulse  /project1/miCOMP  Nombrepar          → pulsa un parámetro (Reset, Start…)
 #   /centinelli/cmd/ping                                        → responde en la bitácora
+#   /centinelli/cmd/sync | detener | columna <n>                → sincronización de Resolume
+#                                         (si el proyecto tiene el script resolume_sync_v3)
 # Agrega los tuyos en ACCIONES (p.ej. cambiar de escena, mandar cue a PIXERA).
 V = mod('centinelli')
 
@@ -110,14 +112,37 @@ def _pulse(args):
     o = op(args[0]); getattr(o.par, args[1]).pulse()
     V.Evento('pulse %s.%s' % (args[0], args[1]))
 
+# ── Sincronización de Resolume (script resolume_sync_v3) ──
+# Busca el Execute DAT 'exec_sync' en todo el proyecto, sin configurar rutas.
+def _sync():
+    encontrados = op('/').findChildren(name='exec_sync', type=executeDAT)
+    if not encontrados:
+        raise Exception('no hay exec_sync en el proyecto (corre resolume_sync_v3)')
+    return encontrados[0].module
+
+def _quien(peer):
+    # peer es el objeto Peer de TD (peer.address); quien manda desde esta
+    # máquina es el agente, o sea el dashboard
+    try:
+        ip = getattr(peer, 'address', None) or peer[0]
+        return 'dashboard' if ip in ('127.0.0.1', 'localhost') else 'remoto ' + str(ip)
+    except Exception:
+        return 'dashboard'
+
 ACCIONES = {
+    '/centinelli/cmd/sync': lambda a: _sync().sincronizar(_ORIGEN[0]),
+    '/centinelli/cmd/detener': lambda a: _sync().detener(),
+    '/centinelli/cmd/columna': lambda a: _sync().columna(int(a[0]) if a else 1),
     '/centinelli/cmd/escena': escena,
     '/centinelli/cmd/par': _par,
     '/centinelli/cmd/pulse': _pulse,
     '/centinelli/cmd/ping': lambda a: V.Evento('pong · fps %.1f' % project.cookRate),
 }
 
+_ORIGEN = ['dashboard']
+
 def onReceiveOSC(dat, rowIndex, message, byteData, timeStamp, address, args, peer):
+    _ORIGEN[0] = _quien(peer)
     f = ACCIONES.get(address)
     if f is None:
         V.Evento('Comando OSC desconocido: ' + address)

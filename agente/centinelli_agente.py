@@ -48,7 +48,7 @@ try:
 except ImportError:
     HAS_SCREEN = False
 
-VERSION = "0.2"
+VERSION = "0.3"
 
 
 # ───────────────────────────── OSC mínimo (sin dependencias) ─────────────────────────────
@@ -146,6 +146,12 @@ class Centinelli:
         # Latido por HTTP: para apps que no pueden mandar OSC periódico pero tienen API
         # (Resolume Arena/Avenue: Preferences ▸ Webserver ▸ Enable Webserver & REST API)
         self.http_hb = cfg.get("http_heartbeat") or {}
+        # Botones con nombre para el dashboard (cada uno manda un OSC, a la app o a otra IP)
+        self.buttons = [b for b in cfg.get("botones", []) if isinstance(b, dict) and b.get("address")]
+        # OSC que se mandan N segundos después de que el agente (re)abre la app
+        # (p.ej. pedir al TouchDesigner maestro que vuelva a sincronizar los Resolume)
+        self.on_restart = cfg.get("al_reiniciar") or {}
+        self.on_restart_at = 0.0
         self.app_host = osc.get("app_host", "127.0.0.1")
         self.app_port = osc.get("app_port", 9301)
 
@@ -247,8 +253,26 @@ class Centinelli:
         with self.lock:
             self.app_values.update(vals)
 
-    def osc_send(self, address, args=()):
-        self.sock_out.sendto(osc_build(address, args), (self.app_host, self.app_port))
+    def osc_send(self, address, args=(), host=None, port=None):
+        # Un socket por envío: en Windows un puerto UDP cerrado puede tumbar el siguiente envío
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        try:
+            try:
+                s.ioctl(socket.SIO_UDP_CONNRESET, False)
+            except Exception:
+                pass
+            s.sendto(osc_build(address, args), (host or self.app_host, int(port or self.app_port)))
+        finally:
+            s.close()
+
+    def send_list(self, mensajes, motivo):
+        for m in mensajes:
+            try:
+                self.osc_send(m["address"], m.get("args", []), m.get("host"), m.get("port"))
+                dest = f'{m.get("host") or self.app_host}:{m.get("port") or self.app_port}'
+                self.event("info", f"{motivo}: OSC {m['address']} {m.get('args', [])} → {dest}")
+            except Exception as e:
+                self.event("error", f"{motivo}: no se pudo mandar {m.get('address')}: {e}")
 
     # ── proceso ──
     def find_procs(self):
@@ -278,6 +302,8 @@ class Centinelli:
                 self.child.poll()          # recoge el proceso anterior (evita zombis en Mac/Linux)
             self.child = subprocess.Popen(self.launch_cmd, **kw)
             self.last_launch = time.time()
+            if self.on_restart.get("mensajes"):
+                self.on_restart_at = self.last_launch + float(self.on_restart.get("espera", 60))
             self.last_beat = 0.0
             self.event("info", f"App iniciada {reason}".strip())
         except Exception as e:
@@ -425,6 +451,12 @@ class Centinelli:
                 self.start_app("desde el dashboard")
             elif t == "screenshot":
                 self.want_screenshot = True
+            elif t == "boton":
+                i = int(args.get("i", -1))
+                if not 0 <= i < len(self.buttons):
+                    raise ValueError("botón inexistente")
+                b = self.buttons[i]
+                self.send_list([b], f"Botón «{b.get('label', b['address'])}»")
             elif t == "osc":
                 addr = args.get("address", "")
                 vals = args.get("args", [])
@@ -473,6 +505,8 @@ class Centinelli:
             "beat_age": round(beat_age, 1) if beat_age is not None else None,
             "metrics": self.metrics(procs),
             "values": values,
+            "buttons": [{"label": b.get("label", b["address"]), "confirm": bool(b.get("confirmar"))}
+                        for b in self.buttons],
             "events": events,
             "acks": self.acks,
             "interval": self.cfg.get("interval", 30),
@@ -514,6 +548,9 @@ class Centinelli:
         last_report = 0
         last_state = None
         while True:
+            if self.on_restart_at and time.time() >= self.on_restart_at:
+                self.on_restart_at = 0.0
+                self.send_list(self.on_restart.get("mensajes", []), "Tras reabrir la app")
             state = self.watchdog()
             now = time.time()
             # reporta en el intervalo, o antes si cambió el estado (para alertar rápido)

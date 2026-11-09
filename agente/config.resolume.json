@@ -3,26 +3,24 @@
   "name": "Resolume Arena · Fachada",
   "server": "https://hectorcruz.com.mx/centinelli/api.php",
   "token": "CAMBIA-ESTE-TOKEN-por-el-de-config.php",
-
   "interval": 30,
   "command_poll": 10,
-
   "app": {
     "process": "Arena.exe",
-    "launch": ["C:/Program Files/Resolume Arena/Arena.exe"],
+    "launch": [
+      "C:/Program Files/Resolume Arena/Arena.exe"
+    ],
     "start_on_boot": true,
     "autorestart": true,
     "restart_grace": 90,
     "max_restarts_per_hour": 6
   },
-
   "http_heartbeat": {
     "url": "http://127.0.0.1:8080/api/v1/composition",
     "every": 5,
     "timeout": 4,
     "resolume": true
   },
-
   "osc": {
     "listen_port": 9300,
     "heartbeat_timeout": 20,
@@ -31,6 +29,52 @@
     "app_host": "127.0.0.1",
     "app_port": 7000
   },
-
-  "screenshot": { "enabled": true, "every": 60, "width": 480, "quality": 60 }
+  "screenshot": {
+    "enabled": true,
+    "every": 60,
+    "width": 480,
+    "quality": 60
+  },
+  "botones": [
+    {
+      "label": "Sincronizar todo",
+      "address": "/centinelli/cmd/sync",
+      "host": "192.168.1.10",
+      "port": 9301,
+      "confirmar": true
+    },
+    {
+      "label": "Columna 1",
+      "address": "/composition/columns/1/connect",
+      "args": [
+        1
+      ]
+    },
+    {
+      "label": "Columna 2",
+      "address": "/composition/columns/2/connect",
+      "args": [
+        1
+      ]
+    },
+    {
+      "label": "Negro",
+      "address": "/composition/disconnectall",
+      "args": [
+        1
+      ],
+      "confirmar": true
+    }
+  ],
+  "al_reiniciar": {
+    "espera": 70,
+    "mensajes": [
+      {
+        "address": "/centinelli/cmd/sync",
+        "host": "192.168.1.10",
+        "port": 9301
+      }
+    ]
+  },
+  "_nota": "192.168.1.10 = IP de la máquina con TouchDesigner que corre resolume_sync_v3 y el COMP centinelli (puerto 9301)"
 }
