@@ -17,7 +17,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['p'])) {
     $err = $CFG['password_hash'] ? 'Contraseña incorrecta' : 'Falta configurar la contraseña (hash.php)';
 }
 $ok = logged_in();
-const VERSION = '0.5';
+const VERSION = '0.6';
 ?><!doctype html>
 <html lang="es">
 <head>
@@ -139,6 +139,12 @@ main{padding:var(--a-pad) max(var(--a-pad),env(safe-area-inset-right)) calc(56px
 .sala-log .a-lbl{margin-right:6px}
 .sep{grid-column:1/-1;color:var(--a-ink-dim);font-size:var(--a-size-sm);padding:6px 2px 0;border-top:1px solid var(--a-line)}
 
+/* salidas de video */
+.pant{display:flex;flex-direction:column;gap:6px;border-top:1px solid var(--a-line);padding-top:var(--a-pad)}
+.pant svg{width:100%;max-height:120px;background:var(--a-bg);border:1px solid var(--a-line);border-radius:var(--a-radius-sm)}
+.pant-difs{color:var(--c-warn);font-size:var(--a-size-sm);line-height:1.5}
+.a-btn[disabled]{opacity:.4;cursor:default}
+
 /* modo mural (h): sólo visor y estado */
 body.mural .ctl{display:none}
 
@@ -210,11 +216,18 @@ const n = (v, u='') => v === undefined || v === null ? '—' : (Math.round(v*10)
 
 function toast(msg){ const t=$('#toast'); t.textContent=msg; t.classList.add('on'); clearTimeout(t._h); t._h=setTimeout(()=>t.classList.remove('on'),2400); }
 
+let ultimo = '';
 async function load(){
+  if (document.hidden) return;            // pestaña oculta: no gastar batería ni datos
   try{
     const r = await fetch('state.php', {cache:'no-store'});
     if (r.status === 401) { location.reload(); return; }
-    const j = await r.json(); serverNow = j.now; data = j.items; salas = j.salas || []; render();
+    const txt = await r.text();
+    const j = JSON.parse(txt); serverNow = j.now; data = j.items; salas = j.salas || [];
+    // sin cambios (salvo la hora del servidor) → no redibujar
+    const firma = txt.replace(/"now":\d+,?/, '');
+    if (firma === ultimo) { actualizarResumen(); return; }
+    ultimo = firma; render();
   }catch(e){ $('#sum').textContent = 'sin conexión con el servidor'; }
 }
 
@@ -223,6 +236,39 @@ function medidor(lbl, v, max=100, umbral=null, u='%'){
   const hot = umbral != null && v != null && v >= umbral;
   return `<div class="m"><div class="a-row"><span class="a-lbl">${lbl}</span><span class="a-val">${n(v, u)}</span></div>
     <span class="a-meter${hot?' hot':''}" role="meter" aria-label="${lbl}" aria-valuemin="0" aria-valuemax="${max}" aria-valuenow="${v??0}"><i style="--v:${val??0}"></i></span></div>`;
+}
+
+// Mapa de salidas de video: referencia (contorno punteado) vs actual (relleno)
+function mapaPantallas(it){
+  const pa = it.pantallas; if (!pa) return '';
+  const act = (pa.salidas||[]).filter(d => d.activa), ref = pa.ref || [];
+  const todas = act.concat(ref);
+  if (!todas.length) return '';
+  const x0 = Math.min(...todas.map(d => d.x)), y0 = Math.min(...todas.map(d => d.y));
+  const x1 = Math.max(...todas.map(d => d.x + d.w)), y1 = Math.max(...todas.map(d => d.y + d.h));
+  const W = x1 - x0 || 1, H = y1 - y0 || 1, pad = W * 0.01;
+  const idxRef = {}; ref.forEach((r, i) => idxRef[r.id] = i + 1);
+  const mal = new Set();
+  act.forEach(a => { const r = ref.find(r => r.id === a.id);
+    if (!r || r.x !== a.x || r.y !== a.y || r.w !== a.w || r.h !== a.h || (r.hz && r.hz !== a.hz)) mal.add(a.id); });
+  const fs = Math.max(W, H) * 0.035;
+  const rects = ref.map((r, i) => `<rect x="${r.x}" y="${r.y}" width="${r.w}" height="${r.h}" fill="none" stroke="#8f8f8f" stroke-width="${W*0.002}" stroke-dasharray="${W*0.008} ${W*0.006}"/>`).join('')
+    + act.map(a => { const bad = mal.has(a.id);
+      return `<rect x="${a.x + pad}" y="${a.y + pad}" width="${a.w - 2*pad}" height="${a.h - 2*pad}" fill="${bad ? '#2a1311' : '#1b2512'}" stroke="${bad ? '#ff6a57' : '#76c411'}" stroke-width="${W*0.002}"/>
+        <text x="${a.x + a.w/2}" y="${a.y + a.h*0.42}" fill="${bad ? '#ff6a57' : '#a5e04a'}" font-size="${a.h*0.34}" text-anchor="middle" dominant-baseline="central" font-family="Inter,Arial">${idxRef[a.id] || '?'}</text>
+        <text x="${a.x + a.w/2}" y="${a.y + a.h*0.8}" fill="#d2d2d2" font-size="${Math.min(a.h*0.13, a.w*0.075)}" text-anchor="middle" font-family="Inter,Arial">${a.w}×${a.h} · ${a.hz} Hz</text>`; }).join('');
+  const id = esc(it.id);
+  const estado = pa.difs && pa.difs.length ? `<span class="desf">▲ ${pa.difs.length} diferencia${pa.difs.length>1?'s':''}${pa.en_gracia?' (arrancando)':''}</span>` : '<span class="a-lbl">todas en su lugar</span>';
+  return `<div class="pant">
+    <div class="a-row"><span class="a-lbl">salidas de video · ${act.length}${ref.length ? '/' + ref.length : ''}</span>${estado}</div>
+    <svg viewBox="${x0 - pad*2} ${y0 - pad*2} ${W + pad*4} ${H + pad*4}" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Disposición de salidas">${rects}</svg>
+    ${pa.difs && pa.difs.length ? `<div class="pant-difs">${pa.difs.map(d => `<div>${esc(d)}</div>`).join('')}</div>` : ''}
+    <div class="btns ctl">
+      <button class="a-btn${pa.difs && pa.difs.length && pa.restaurable ? ' primary' : ''}" ${pa.ref ? '' : 'disabled'} onclick="cmd('${id}','pantallas_restaurar','¿Volver a poner las salidas de video en su disposición de referencia? Arena se reabre después.')">restaurar pantallas</button>
+      <button class="a-btn" onclick="cmd('${id}','pantallas_guardar','¿Guardar la disposición ACTUAL como la correcta? Hazlo sólo cuando todas las salidas estén bien.')">guardar como referencia</button>
+      <span class="a-lbl" style="align-self:center">${pa.auto ? 'restauración automática' : 'restauración manual'}${pa.ultima ? ' · última ' + hora(pa.ultima) : ''}</span>
+    </div>
+  </div>`;
 }
 
 function tarjeta(it){
@@ -257,6 +303,7 @@ function tarjeta(it){
         <div class="m"><div class="a-row"><span class="a-lbl">reporte</span><span class="a-val">${hace(it.last_seen)}</span></div></div>
       </div>
       ${Object.keys(v).length ? `<div class="vals">${Object.entries(v).map(([k,x])=>`<span><span class="a-lbl">${esc(k)}</span> <span class="a-val">${esc(Array.isArray(x)?x.join(' '):x)}</span></span>`).join('')}</div>`:''}
+      ${mapaPantallas(it)}
       <div class="meta">${esc(it.os||'')}${it.agent? ' · agente '+esc(it.agent):''}</div>
       ${(it.buttons||[]).length ? `<div class="cues ctl">${it.buttons.map((b,i)=>`<button class="a-btn cue" onclick="boton('${id}',${i},${b.confirm?1:0},this)">${esc(b.label)}</button>`).join('')}</div>`:''}
       <div class="btns ctl">
@@ -361,6 +408,10 @@ function render(){
     html += sueltos.map(tarjeta).join('');
     g.innerHTML = html;
   }
+  actualizarResumen();
+}
+
+function actualizarResumen(){
   const mal = data.filter(i => Object.keys(i.problems||{}).length).length;
   $('#sum').innerHTML = `<b>${data.length}</b> instalaci${data.length===1?'ón':'ones'} · ${mal ? `<b class="f">${mal} con fallas</b>` : 'todo en marcha'} · ${new Date().toLocaleTimeString('es-MX')}`;
   document.title = mal ? `(${mal}) Centinelli` : 'Centinelli';

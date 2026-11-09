@@ -4,7 +4,7 @@
 
 Centinelli vigila la computadora de una instalación mientras tú no estás. Sabe si la pieza sigue viva, la reinicia si se cae o se congela y te avisa por Telegram. Desde el teléfono puedes verla en miniatura y mandarle comandos.
 
-Versión 0.5 · prototipo · Colección Alchemy of Meaning (Alquimia del Significado)
+Versión 0.6 · prototipo · Colección Alchemy of Meaning (Alquimia del Significado)
 
 ![Sala de 5 Resolume vigilada desde el Server 1](capturas/09-server1.png)
 
@@ -16,6 +16,7 @@ Versión 0.5 · prototipo · Colección Alchemy of Meaning (Alquimia del Signifi
 - **Recibe comandos** desde el dashboard: reiniciar la app (reiniciar la PC está desactivado por defecto), pedir una captura o mandar cualquier mensaje OSC a la pieza (cambiar de escena, disparar una columna de Arena).
 - **Botones de cue** por instalación («Sincronizar todo», «Columna 1», «Negro»), definidos en la máquina.
 - **Sincroniza varios Resolume sin TouchDesigner.** Los agentes de una *sala* se mandan entre ellos la secuencia Negro → Columna 2 → Columna 1: al encender, cuando un Arena se reabre, a ciertas horas o con un botón. El dashboard muestra la columna activa de cada server y avisa si hay desfase Puede ir **en una sola máquina** que vigila a las demás por el REST API de Resolume y sincroniza cuando todas terminaron de arrancar (ver [INSTALAR-SERVER1.md](INSTALAR-SERVER1.md) y [SALA.md](resolume/SALA.md)).
+- **Vigila las salidas de video.** Si Windows reacomoda los displays (un proyector que entra en standby, un HDMI que parpadea), lo detecta por puerto físico, lo restaura y reabre Arena. Si una salida desaparece, avisa (ver [PANTALLAS.md](PANTALLAS.md)).
 - **Avisa** por Telegram o correo si una máquina pierde conexión, si la app falla más de 45 s o si el GPU se calienta. También avisa cuando se resuelve.
 - **No abre puertos.** La máquina sólo hace conexiones de salida por HTTPS, así que funciona detrás del firewall de museos y teatros.
 
@@ -24,6 +25,8 @@ Versión 0.5 · prototipo · Colección Alchemy of Meaning (Alquimia del Signifi
 | ![móvil](capturas/02-movil.png) | ![mural](capturas/03-mural.png) | ![acceso](capturas/04-acceso.png) |
 
 ![Instalaciones sueltas: TouchDesigner, Resolume, Isadora](capturas/01-dashboard.png)
+
+![Mapa de salidas de video de un server: dos proyectores intercambiados](capturas/11-pantallas.png)
 
 ![Botones de cue y bitácora de sincronización](capturas/06-botones-sync.png)
 
@@ -65,7 +68,7 @@ Licencia GPL-3.0.
 
 Centinelli watches an installation computer while you are away. It knows whether the piece is still running, restarts it when it crashes or freezes, and alerts you on Telegram. From your phone you can see a thumbnail and send it commands.
 
-Version 0.5 · prototype · Alchemy of Meaning collection
+Version 0.6 · prototype · Alchemy of Meaning collection
 
 ### What it does
 
@@ -75,6 +78,7 @@ Version 0.5 · prototype · Alchemy of Meaning collection
 - **Takes commands** from the dashboard: restart the app or the PC, take a screenshot, or send any OSC message to the piece (change scene, trigger an Arena column).
 - **Cue buttons** per installation, defined on each machine.
 - **Keeps several Resolume servers in sync without TouchDesigner.** The agents in a *room* send each other the sync sequence: at power-on, when an Arena is reopened, on a schedule, or from a button. The dashboard shows each server's active column and flags drift.
+- **Watches video outputs.** If Windows reshuffles the displays, it detects it per physical port, restores the layout and reopens Arena; if an output disappears, it alerts you.
 - **Alerts** by Telegram or email when a machine goes offline, the app fails for more than 45 s, or the GPU runs hot. It also tells you when the problem clears.
 - **Opens no ports.** The machine only makes outbound HTTPS requests, so it works behind museum and theatre firewalls.
 

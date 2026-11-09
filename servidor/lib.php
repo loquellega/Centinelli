@@ -79,6 +79,12 @@ function problems($st, $now = null) {
     if (($m['gpu_temp'] ?? 0) > $CFG['gpu_temp_max']) $p['gpu_temp'] = 'GPU caliente: ' . $m['gpu_temp'] . ' °C';
     if (($m['cpu_temp'] ?? 0) > $CFG['cpu_temp_max']) $p['cpu_temp'] = 'CPU caliente: ' . $m['cpu_temp'] . ' °C';
     if (($m['disk'] ?? 0) > $CFG['disk_max'])         $p['disk'] = 'Disco casi lleno: ' . $m['disk'] . ' %';
+    // Salidas de video reacomodadas o desconectadas
+    $pa = $st['pantallas'] ?? null;
+    if (is_array($pa) && !empty($pa['difs']) && empty($pa['en_gracia'])) {
+        $n = count($pa['difs']);
+        $p['pantallas'] = "Salidas de video: $n diferencia" . ($n > 1 ? 's' : '') . ' — ' . $pa['difs'][0] . ($n > 1 ? ' …' : '');
+    }
     // Resolume de la sala vigilados desde esta máquina
     foreach (($st['sala']['remotos'] ?? null) ?: [] as $r) {
         if (($r['estado'] ?? '') === 'caido') {
@@ -95,6 +101,7 @@ function check_alerts($id, $st, $agent_errors = []) {
     $file = inst_dir($id) . '/alerts.json';
     $a = jread($file, ['active' => [], 'pending' => []]);
     $a += ['active' => [], 'pending' => []];
+    $prev0 = $a;
     $probs = problems($st);
     $t = time();
     $delay = (int)($CFG['alert_delay'] ?? 45);
@@ -115,7 +122,7 @@ function check_alerts($id, $st, $agent_errors = []) {
         if (!isset($probs[$k])) { unset($a['active'][$k]); $msgs[] = "🟢 $name — resuelto: $txt"; }
     }
     foreach ($agent_errors as $e) $msgs[] = "⚠️ $name — $e";
-    jwrite($file, $a);
+    if ($a != $prev0) jwrite($file, $a);     // escribe sólo si cambió
     if ($msgs) {
         notify(implode("\n", $msgs));
         log_event($id, ['t' => $t, 'level' => 'alerta', 'msg' => implode(' · ', $msgs)]);
@@ -176,6 +183,7 @@ function pick_sala_agent($sala) {
     foreach ($s['miembros'] as $id) {
         $st = jread(DATA . "/$id/state.json");
         if (isset(problems($st)['offline'])) continue;
+        if (($st['sala']['servidores'] ?? 0) < 1) continue;   // sólo agentes que conocen las IPs de la sala
         $cands[$id] = $st['last_seen'] ?? 0;
     }
     if (!$cands) return null;

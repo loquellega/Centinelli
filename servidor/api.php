@@ -47,7 +47,9 @@ unset($in['events']);
 $acks = is_array($in['acks'] ?? null) ? $in['acks'] : [];
 unset($in['acks']);
 $pending = [];
-jupdate("$dir/cmds.json", function ($cmds) use ($acks, &$pending, $now) {
+$cmdsFile = "$dir/cmds.json";
+$hay = $acks || (is_file($cmdsFile) && strpos((string)@file_get_contents($cmdsFile), '"pendiente"') !== false);
+if ($hay) jupdate($cmdsFile, function ($cmds) use ($acks, &$pending, $now) {
     foreach ($cmds as &$c) {
         foreach ($acks as $a) {
             if (($a['id'] ?? null) === $c['id']) { $c['status'] = 'hecho'; $c['result'] = (string)($a['result'] ?? ''); $c['done'] = $now; }
@@ -60,8 +62,9 @@ jupdate("$dir/cmds.json", function ($cmds) use ($acks, &$pending, $now) {
     return array_slice($cmds, -30);
 });
 
-// Estado
+// Estado (un reporte "ligero" sólo trae lo que cambia rápido: se completa con el anterior)
 $prev = jread("$dir/state.json");
+if (!empty($in['ligero'])) { unset($in['ligero']); $in += $prev; }
 $in['last_seen'] = $now;
 $in['ip'] = $_SERVER['REMOTE_ADDR'] ?? '';
 if (empty($in['thumb_t']) && !empty($prev['thumb_t'])) $in['thumb_t'] = $prev['thumb_t'];

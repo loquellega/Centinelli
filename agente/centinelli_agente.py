@@ -48,7 +48,10 @@ try:
 except ImportError:
     HAS_SCREEN = False
 
-VERSION = "0.5"
+VERSION = "0.6"
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import pantallas  # noqa: E402  (vigilancia de salidas de video, Windows)
 
 
 # ───────────────────────────── OSC mínimo (sin dependencias) ─────────────────────────────
@@ -171,8 +174,26 @@ class Centinelli:
         self.remotos = {x["ip"]: {"nombre": x["nombre"], "ok": False, "desde": 0.0, "col": None,
                                    "comp": None, "visto": 0.0} for x in self.sala_srv}
         self.boot_sync_done = False      # ¿ya hubo una sincronización desde que arrancó el agente?
+        # si la sala incluye esta máquina (127.0.0.1), su sondeo hace de latido y no se pregunta dos veces
+        self.local_hb_from_sala = self.vigilar and any(ip in ("127.0.0.1", "localhost") for ip in self.sala_ips)
+        if self.local_hb_from_sala:
+            self.hb_timeout = max(self.hb_timeout, 3 * float(self.sala.get("vigilar_cada", 15)))
         self.esperar_todos = bool(self.sala.get("esperar_a_todos", False)) and self.vigilar
         self.boot_logged_wait = False
+        # Salidas de video: vigilar que Windows no reacomode los displays
+        pc = cfg.get("pantallas") or {}
+        self.pant_cfg = pc
+        self.pant_on = bool(pc.get("vigilar", False))
+        base = os.path.dirname(os.path.abspath(cfg.get("_ruta", __file__)))
+        self.pant_ref_path = os.path.join(base, pc.get("referencia", "pantallas_referencia.json"))
+        self.pant_ref = pantallas.cargar_ref(self.pant_ref_path) if self.pant_on else None
+        self.pant_actual = None
+        self.pant_difs = []
+        self.pant_restaurable = False
+        self.pant_desde = 0.0            # desde cuándo hay diferencias
+        self.pant_ultima = 0.0           # última restauración
+        self.pant_restauraciones = deque(maxlen=50)
+        self.pant_pedido = None          # "guardar" / "restaurar" desde el dashboard
         self.sala_port = int(self.sala.get("puerto", 7000))
         self.sala_seq = self.sala.get("secuencia") or [
             {"address": "/composition/disconnectall", "args": [1]},
@@ -197,6 +218,11 @@ class Centinelli:
         self.acks = []
         self.last_launch = 0.0
         self.child = None
+        self.app_lock = threading.Lock()
+        self._pids = []
+        self._pids_scan = 0.0
+        self._metrics = {}
+        self._metrics_t = 0.0   # un solo reinicio a la vez (watchdog, pantallas, dashboard)
         self.restart_times = deque(maxlen=50)
         self.paused = False           # "detener app" desde el dashboard pausa el watchdog
         self.want_screenshot = False
@@ -264,6 +290,9 @@ class Centinelli:
             c = json.loads(raw.decode("utf-8", "replace"))
         except Exception:
             return
+        self._resolume_values_dict(c)
+
+    def _resolume_values_dict(self, c):
         def val(d, *path):
             for k in path:
                 if not isinstance(d, dict):
@@ -385,6 +414,13 @@ class Centinelli:
         except Exception:
             ok, col, comp, cargada = False, None, None, False
         now = time.time()
+        if ip in ("127.0.0.1", "localhost") and ok:
+            # la propia máquina: este sondeo sirve también de latido (no se consulta dos veces)
+            with self.lock:
+                self.last_beat = now
+                self.beat_count += 1
+            if self.http_hb.get("resolume") or self.local_hb_from_sala:
+                self._resolume_values_dict(c)
         antes = r["ok"]
         r.update(col=col if ok else r["col"], comp=comp if ok else r["comp"], cargada=cargada)
         if ok:
@@ -402,7 +438,7 @@ class Centinelli:
                 self.event("info", f"Sala: {r['nombre']} ({ip}) listo")
 
     def remote_loop(self):
-        every = float(self.sala.get("vigilar_cada", 5))
+        every = float(self.sala.get("vigilar_cada", 15))
         self.event("info", f"Sala: vigilando {len(self.sala_srv)} Resolume por su REST API (puerto {self.api_port})")
         while True:
             hilos = [threading.Thread(target=self._poll_remote, args=(ip,), daemon=True) for ip in self.sala_ips]
@@ -460,13 +496,97 @@ class Centinelli:
                 self.sala_last_sched = clave
                 self.sala_sync(f"horario {hhmm}")
 
+    # ── salidas de video ──
+    def pant_restaurar(self, motivo):
+        ok, detalle = pantallas.restaurar(self.pant_ref)
+        self.pant_ultima = time.time()
+        self.pant_restauraciones.append(self.pant_ultima)
+        self.event("info" if ok else "error", f"Pantallas: restauración ({motivo}) — {detalle}")
+        time.sleep(3)
+        self.pant_actual = pantallas.leer()
+        difs, _ = pantallas.comparar(self.pant_actual, self.pant_ref)
+        if ok and not difs:
+            self.pant_difs = []
+            if self.pant_cfg.get("tras_restaurar", "reiniciar_app") == "reiniciar_app" and self.proc_name:
+                self.paused = False
+                self.restart_app("las salidas de video se reacomodaron; reabro la app para que tome las pantallas")
+        elif difs:
+            self.event("error", "Pantallas: siguen distintas tras restaurar: " + "; ".join(difs))
+
+    def pant_loop(self):
+        every = float(self.pant_cfg.get("cada", 5))
+        estable = float(self.pant_cfg.get("estable", 10))
+        gracia = float(self.cfg.get("app", {}).get("espera_arranque", 0))
+        maxh = int(self.pant_cfg.get("max_restauraciones_hora", 6))
+        prev_difs = []
+        while True:
+            try:
+                self.pant_actual = pantallas.leer()
+                if self.pant_actual is None:
+                    self.event("warn", "Pantallas: vigilancia de salidas sólo disponible en Windows")
+                    return
+                pedido, self.pant_pedido = self.pant_pedido, None
+                if pedido == "guardar" or (self.pant_ref is None and any(d.get("activa") for d in self.pant_actual)
+                                          and time.time() - self.t0 >= gracia):
+                    self.pant_ref = pantallas.guardar_ref(self.pant_ref_path, self.pant_actual)
+                    self.event("info", f"Pantallas: disposición de referencia guardada ({len(self.pant_ref)} salidas: "
+                               + ", ".join(f"{d['nombre']} {d['w']}×{d['h']}@{d['hz']} en {d['x']},{d['y']}"
+                                           for d in self.pant_ref) + ")")
+                difs, restaurable = pantallas.comparar(self.pant_actual, self.pant_ref)
+                now = time.time()
+                if difs and not self.pant_difs:
+                    self.pant_desde = now
+                self.pant_difs, self.pant_restaurable = difs, restaurable
+                en_gracia = now - self.t0 < gracia
+                if difs != prev_difs and not en_gracia:
+                    if difs:
+                        self.event("warn", "Pantallas: " + "; ".join(difs))
+                    elif prev_difs:
+                        self.event("info", "Pantallas: todas las salidas en su lugar")
+                prev_difs = difs
+                if pedido == "restaurar":
+                    self.pant_restaurar("pedido desde el dashboard")
+                elif (difs and restaurable and self.pant_cfg.get("restaurar", False) and not en_gracia
+                      and now - self.pant_desde >= estable):
+                    recientes = [t for t in self.pant_restauraciones if now - t < 3600]
+                    if len(recientes) >= maxh:
+                        if now - self.pant_ultima > 600:
+                            self.event("error", f"Pantallas: ya restauré {len(recientes)} veces en una hora; "
+                                                "no lo intento más. Revisa cables, emuladores de EDID o proyectores.")
+                            self.pant_ultima = now
+                    else:
+                        self.pant_restaurar("automática")
+            except Exception as e:
+                self.event("error", f"Pantallas: {e}")
+            time.sleep(every)
+
+    def pant_report(self):
+        if not self.pant_on or self.pant_actual is None:
+            return None
+        gracia = float(self.cfg.get("app", {}).get("espera_arranque", 0))
+        return {"salidas": self.pant_actual, "ref": self.pant_ref, "difs": self.pant_difs,
+                "restaurable": self.pant_restaurable, "auto": bool(self.pant_cfg.get("restaurar", False)),
+                "en_gracia": time.time() - self.t0 < gracia,
+                "ultima": int(self.pant_ultima) if self.pant_ultima else None}
+
     # ── proceso ──
     def find_procs(self):
         if self.child is not None:
             self.child.poll()
         if not self.proc_name:
             return []
+        # Rápido: ¿siguen vivos los PIDs que ya conocíamos? (evita recorrer todos los procesos)
+        vivos = []
+        for p in self._pids:
+            try:
+                if p.is_running() and p.status() != psutil.STATUS_ZOMBIE and p.name().lower() == self.proc_name:
+                    vivos.append(p)
+            except psutil.Error:
+                pass
+        if vivos and time.time() - self._pids_scan < 60:
+            return vivos
         found = []
+        self._pids_scan = time.time()
         for p in psutil.process_iter(["name", "pid"]):
             try:
                 if (p.info["name"] or "").lower() == self.proc_name \
@@ -474,6 +594,7 @@ class Centinelli:
                     found.append(p)
             except (psutil.NoSuchProcess, psutil.AccessDenied):
                 pass
+        self._pids = found
         return found
 
     def start_app(self, reason=""):
@@ -513,6 +634,10 @@ class Centinelli:
         self.event("info", f"App detenida ({len(procs)} proceso/s)")
 
     def restart_app(self, reason):
+        with self.app_lock:
+            self._restart_app(reason)
+
+    def _restart_app(self, reason):
         now = time.time()
         recent = [t for t in self.restart_times if now - t < 3600]
         if len(recent) >= self.max_restarts_hour:
@@ -547,6 +672,8 @@ class Centinelli:
         return state, procs, beat_age
 
     def watchdog(self):
+        if self.app_lock.locked():          # hay un reinicio en curso
+            return "iniciando"
         # Al encender, Windows abre la app por su cuenta: no la tocamos durante la gracia inicial
         if time.time() - self.t0 < float(self.cfg.get("app", {}).get("espera_arranque", 0)):
             return "iniciando"
@@ -613,7 +740,9 @@ class Centinelli:
             return None
         try:
             with mss.mss() as s:
-                mon = s.monitors[sc.get("monitor", 0)]  # 0 = todos los monitores
+                # 1 = pantalla principal (de control); 0 = todas juntas. Capturar las salidas de
+                # los proyectores cada pocos segundos puede costarle cuadros a Resolume.
+                mon = s.monitors[min(sc.get("monitor", 1), len(s.monitors) - 1)]
                 raw = s.grab(mon)
                 img = Image.frombytes("RGB", raw.size, raw.bgra, "raw", "BGRX")
             w = sc.get("width", 480)
@@ -655,6 +784,12 @@ class Centinelli:
                     raise ValueError("dirección OSC inválida")
                 self.osc_send(addr, vals)
                 self.event("info", f"OSC enviado a la app: {addr} {vals}")
+            elif t == "pantallas_guardar":
+                self.pant_pedido = "guardar"
+            elif t == "pantallas_restaurar":
+                if not self.pant_ref:
+                    raise ValueError("no hay disposición de referencia")
+                self.pant_pedido = "restaurar"
             elif t == "sala_sync":
                 self.sala_sync("dashboard")
             elif t == "sala_boton":
@@ -685,13 +820,16 @@ class Centinelli:
         self.acks.append({"id": cid, "result": result})
 
     # ── reporte al servidor ──
-    def report(self, state=None):
+    def report(self, state=None, full=True):
         st, procs, beat_age = self.app_state()
         state = state or st
         now = time.time()
         sc = self.cfg.get("screenshot", {})
         shot = None
-        if self.want_screenshot or now - self.last_shot > sc.get("every", 60):
+        if full or self.want_screenshot:
+            self._metrics = self.metrics(procs)      # nvidia-smi sólo en reportes completos
+            self._metrics_t = now
+        if self.want_screenshot or (full and now - self.last_shot > sc.get("every", 300)):
             shot = self.screenshot()
             self.last_shot = now
             self.want_screenshot = False
@@ -707,16 +845,17 @@ class Centinelli:
             "state": state,
             "paused": self.paused,
             "beat_age": round(beat_age, 1) if beat_age is not None else None,
-            "metrics": self.metrics(procs),
+            "metrics": self._metrics,
             "values": values,
             "allow_reboot": self.allow_reboot,
+            "pantallas": self.pant_report(),
             "sala": ({"id": self.sala.get("id", "sala"), "nombre": self.sala.get("nombre", self.sala.get("id", "sala")),
                       "coordinador": bool(self.sala.get("coordinador")), "servidores": len(self.sala_ips),
                       "remotos": self.remotos_report() if self.vigilar else None,
                       "sync_hecha": self.boot_sync_done,
                       "botones": [b.get("label", b["address"]) for b in self.sala_buttons],
                       "horarios": self.sala.get("sync_horarios", [])}
-                     if self.sala_ips else None),
+                     if self.sala.get("id") or self.sala_ips else None),
             "buttons": [{"label": b.get("label", b["address"]), "confirm": bool(b.get("confirmar"))}
                         for b in self.buttons],
             "events": events,
@@ -725,6 +864,11 @@ class Centinelli:
         }
         if shot:
             body["thumb"] = shot
+        if not full:
+            # reporte ligero: sólo lo que cambia rápido; el servidor conserva el resto
+            body = {k: body[k] for k in ("id", "name", "state", "paused", "beat_age", "values", "events",
+                                         "acks", "interval", "sala", "pantallas") if k in body}
+            body["ligero"] = True
         req = urllib.request.Request(
             self.cfg["server"], data=json.dumps(body).encode(),
             headers={"Content-Type": "application/json",
@@ -749,14 +893,22 @@ class Centinelli:
         return False
 
     def run(self):
+        # Prioridad baja: el agente nunca compite con Resolume/TouchDesigner por CPU
+        try:
+            me = psutil.Process()
+            me.nice(psutil.BELOW_NORMAL_PRIORITY_CLASS if os.name == "nt" else 10)
+        except Exception:
+            pass
         threading.Thread(target=self.osc_loop, daemon=True).start()
-        if self.http_hb.get("url"):
+        if self.http_hb.get("url") and not self.local_hb_from_sala:
             threading.Thread(target=self.http_loop, daemon=True).start()
         self.event("info", f"Centinelli {VERSION} iniciado en {socket.gethostname()}")
         if self.cfg.get("app", {}).get("start_on_boot") and not self.find_procs():
             self.start_app("al arrancar el agente")
         if self.vigilar:
             threading.Thread(target=self.remote_loop, daemon=True).start()
+        if self.pant_on:
+            threading.Thread(target=self.pant_loop, daemon=True).start()
         if self.sala.get("coordinador"):
             if self.esperar_todos:
                 self.event("info", "Sala: espero a que los {} servidores respondan (margen {} s, tope {} s)".format(
@@ -766,6 +918,7 @@ class Centinelli:
         interval = self.cfg.get("interval", 30)
         poll = self.cfg.get("command_poll", 10)  # cada cuánto pregunta si hay comandos
         last_report = 0
+        last_full = 0
         last_state = None
         while True:
             self.sala_tick()
@@ -775,13 +928,14 @@ class Centinelli:
             state = self.watchdog()
             now = time.time()
             # reporta en el intervalo, o antes si cambió el estado (para alertar rápido)
-            if now - last_report >= interval or state != last_state or self.acks or self.want_screenshot:
-                self.report(state)
+            if now - last_full >= interval or self.want_screenshot:
+                self.report(state, full=True)
+                last_report = last_full = now
+                last_state = state
+            elif state != last_state or self.acks or now - last_report >= poll:
+                self.report(state, full=False)          # cambio de estado, confirmación o consulta de órdenes
                 last_report = now
                 last_state = state
-            elif now - last_report >= poll:
-                self.report(state)
-                last_report = now
             time.sleep(2)
 
 
@@ -789,6 +943,7 @@ def main():
     path = sys.argv[1] if len(sys.argv) > 1 else os.path.join(os.path.dirname(__file__), "config.json")
     with open(path, encoding="utf-8") as f:
         cfg = json.load(f)
+    cfg["_ruta"] = os.path.abspath(path)
     for k in ("server", "token", "id"):
         if not cfg.get(k):
             print(f"Falta '{k}' en {path}")

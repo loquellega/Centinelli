@@ -30,7 +30,7 @@ if ($type === 'sala_sync' || $type === 'sala_boton') {
 
 // ── comandos de una instalación ──
 $id = $in['id'] ?? '';
-$allowed = ['restart_app', 'stop_app', 'start_app', 'screenshot', 'reboot', 'osc', 'boton'];
+$allowed = ['restart_app', 'stop_app', 'start_app', 'screenshot', 'reboot', 'osc', 'boton', 'pantallas_guardar', 'pantallas_restaurar'];
 if (!valid_id($id) || !is_file(DATA . "/$id/state.json")) json_out(['error' => 'instalación'], 404);
 if (!in_array($type, $allowed, true)) json_out(['error' => 'comando'], 400);
 $st = jread(DATA . "/$id/state.json");

@@ -1,6 +1,6 @@
 # Centinelli · guía de instalación
 
-Versión 0.5. **¿Primera vez? Empieza por [PRUEBA-LOCAL.md](PRUEBA-LOCAL.md).** Sirve para saber desde el teléfono si cada instalación está viva, verla en una miniatura, recibir un aviso por Telegram si algo falla y reiniciarla a distancia.
+Versión 0.6. **¿Primera vez? Empieza por [PRUEBA-LOCAL.md](PRUEBA-LOCAL.md).** Sirve para saber desde el teléfono si cada instalación está viva, verla en una miniatura, recibir un aviso por Telegram si algo falla y reiniciarla a distancia.
 
 ```
  Máquina de la instalación                          Tu hosting PHP
@@ -87,7 +87,11 @@ Ver `resolume/RESOLUME.md`. No necesita patch: el agente usa el REST API de Aren
 
 Varias máquinas con Arena se agrupan en una **sala** (bloque `sala` del `config.json`). Los agentes se mandan la secuencia de sincronización entre ellos: al encender (sólo el coordinador), cuando uno reabre Arena, a ciertas horas o con el botón del dashboard. No hace falta TouchDesigner. Dos variantes: **un solo agente en el primer server** que vigila a los demás por su REST API y sincroniza cuando todos arrancaron (`INSTALAR-SERVER1.md`, `agente/config.server1.json`), o un agente en cada server (`resolume/SALA.md`, `agente/config.sala.json`).
 
-## 7. Botones de cue y acciones al reiniciar
+## 7. Salidas de video
+
+Con el bloque `pantallas`, el agente vigila que Windows no reacomode los displays: orden, posición, resolución y Hz de cada salida, identificada por su puerto físico. Si sólo cambió el orden, las restaura y reabre la app. Si falta una salida, avisa. Guía completa en `PANTALLAS.md`.
+
+## 8. Botones de cue y acciones al reiniciar
 
 En el `config.json` de cada máquina puedes definir:
 
@@ -95,6 +99,17 @@ En el `config.json` de cada máquina puedes definir:
 - `al_reiniciar`: mensajes OSC que el agente manda N segundos después de abrir la app. Sirve, por ejemplo, para pedir una resincronización.
 
 Ejemplos en `agente/config.resolume.json` y explicación completa en `resolume/SINCRONIZACION.md`.
+
+## Rendimiento
+
+- El agente corre con prioridad baja.
+- Entre reportes completos (cada `interval`, 30–60 s) manda reportes ligeros sólo con estado, valores y órdenes; `nvidia-smi` se consulta sólo en los completos.
+- Busca el proceso de la app por su PID, sin recorrer todos los procesos.
+- Si vigila la sala, consulta el REST API de su propio Arena una sola vez para todo.
+- El servidor sólo escribe en disco lo que cambió.
+- El dashboard no redibuja si nada cambió y deja de consultar cuando la pestaña está oculta.
+
+Mediciones en `INSTALAR-SERVER1.md`.
 
 ## Lista para dejar una máquina sola
 

@@ -6,7 +6,7 @@
 
 1. El técnico prende los proyectores y luego los servers en orden: 1, 2, 3, 4 y 5. Igual que ahora.
 2. Windows abre Arena en cada server con su archivo, como ahora. Centinelli **no** abre otro Arena durante el arranque.
-3. El Server 1 pregunta cada 5 s a los 5 Arena si ya respondieron. Cuando **los 5 están listos y pasa 1 minuto más**, manda a los 5 la secuencia **Negro → Columna 2 → Columna 1**. Ahí quedan sincronizados.
+3. El Server 1 pregunta cada 15 s a los 5 Arena si ya respondieron. Cuando **los 5 están listos y pasa 1 minuto más**, manda a los 5 la secuencia **Negro → Columna 2 → Columna 1**. Ahí quedan sincronizados.
    - Si alguno no arranca, a los **15 minutos** sincroniza de todos modos con los que estén y te avisa cuál falta.
    - Si prefieres un tiempo fijo (por ejemplo, 8 minutos después de encender el Server 1), está la opción de abajo.
 4. Durante el día, el Server 1 vigila los 5:
@@ -80,11 +80,27 @@ En ese momento los 5 Arena hacen Negro, Columna 2 y Columna 1. Abre el dashboard
 
 ## Paso 5 · Que arranque solo
 
+> El Server 1 también vigila sus **salidas de video** (bloque `pantallas`). Si quieres vigilar las de los servers 2 a 5, ver [PANTALLAS.md](PANTALLAS.md).
+
+
 1. Clic derecho en `instalar_inicio_windows.bat` ▸ **Ejecutar como administrador**.
 2. Deja el acceso directo de Arena en el inicio de Windows, como está. Centinelli no lo abre al encender: sólo lo reabre si se cae después del arranque.
 3. Reinicia el Server 1 y repite el encendido normal de la sala para comprobarlo.
 
 Lo que hace Centinelli queda registrado en `C:\centinelli\centinelli.log`.
+
+## Rendimiento
+
+Medido con 5 Resolume simulados, cada uno con una composición de ~1 MB (6 capas × 40 clips):
+
+| | Server 1 (vigila la sala) | Server con sólo pantallas |
+|---|---|---|
+| CPU del agente | ~0.75 % de un núcleo | ~0.2 % de un núcleo |
+| Memoria | ~50 MB | ~37 MB |
+| Consultas al REST API de cada Arena | 4 por minuto | 4 por minuto |
+| Llamadas a `nvidia-smi` | 2 por minuto | 1 por minuto |
+
+El agente corre con **prioridad baja**: Windows siempre le da preferencia a Resolume. Las capturas de pantalla se toman cada 5 min y sólo del monitor principal (`screenshot.monitor: 1`). Si notas cualquier tirón en las salidas, desactívalas con `"enabled": false`.
 
 ## Ajustes
 
