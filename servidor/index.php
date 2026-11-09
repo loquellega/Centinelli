@@ -17,7 +17,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['p'])) {
     $err = $CFG['password_hash'] ? 'Contraseña incorrecta' : 'Falta configurar la contraseña (hash.php)';
 }
 $ok = logged_in();
-const VERSION = '0.4';
+const VERSION = '0.5';
 ?><!doctype html>
 <html lang="es">
 <head>
@@ -280,6 +280,30 @@ function tarjeta(it){
   </section>`;
 }
 
+function panelRemotos(s, coord){
+  // Sala vigilada desde una sola máquina (Server 1): los demás no tienen agente
+  const off = coord && (coord.problems||{}).offline;
+  const rs = s.remotos;
+  const ok = rs.filter(r => r.estado === 'ok' && !off);
+  const cols = {};
+  ok.forEach(r => { (cols[r.col] ??= []).push(r.nombre); });
+  const ck = Object.keys(cols);
+  let colTxt = '';
+  if (ck.length === 1) colTxt = `<span class="a-lbl">columna</span> <span class="a-val">${esc(ck[0])}</span> <span class="a-lbl">en todos</span>`;
+  else if (ck.length > 1) {
+    const mayor = ck.sort((a,b) => cols[b].length - cols[a].length)[0];
+    colTxt = `<span class="desf">▲ desfase: ${ck.filter(c => c !== mayor).map(c => `${cols[c].map(esc).join(', ')} en ${esc(c)}`).join(' · ')} (el resto en columna ${esc(mayor)})</span>`;
+  }
+  const arrancando = rs.some(r => r.estado === 'arrancando') && !off;
+  const caidos = rs.filter(r => r.estado === 'caido').length;
+  const sev = off || caidos ? 'falla' : (ck.length > 1 || arrancando ? 'aviso' : 'vivo');
+  const lbl = off ? 'sin conexión con el server que vigila' : `${ok.length}/${rs.length} responden${arrancando ? ' · esperando arranque' : ''}${ck.length > 1 ? ' · desfase' : ''}`;
+  return {sev, lbl, colTxt, chips: rs.map(r => {
+    const [cl, txt] = off ? ['', 'sin datos'] : r.estado === 'ok' ? ['vivo', 'responde'] : r.estado === 'arrancando' ? ['aviso', 'arrancando'] : ['falla', 'no responde'];
+    return `<span class="chip"><span class="dot ${cl}"></span><span class="a-val">${esc(r.nombre)}</span>
+      <span class="a-lbl">${txt}${r.estado==='ok' && !off ? ' · col '+esc(r.col) : ''} · ${esc(r.ip)}</span></span>`; }).join('')};
+}
+
 function panelSala(s){
   const miembros = s.miembros.map(id => data.find(d => d.id === id)).filter(Boolean);
   const vivos = miembros.filter(m => !Object.keys(m.problems||{}).length && m.state === 'ok');
@@ -301,20 +325,22 @@ function panelSala(s){
   const ev = miembros.flatMap(m => (m.events||[]).filter(e => /^Sala:/.test(e.msg)).map(e => ({...e, quien: m.name || m.id})))
     .sort((a,b) => b.t - a.t).slice(0, 6);
   const sid = esc(s.id);
-  return `<section class="a-win sala${todos?'':' falla'}" aria-label="Sala ${esc(s.nombre)}">
+  const R = s.remotos ? panelRemotos(s, data.find(d => d.id === s.coordinador)) : null;
+  const sev = R ? R.sev : (!todos ? 'falla' : (desfase ? 'aviso' : 'vivo'));
+  return `<section class="a-win sala${sev==='falla'?' falla':''}" aria-label="Sala ${esc(s.nombre)}">
     <div class="a-tb"><span class="tb-name">sala · ${esc(s.nombre)}</span>
-      <span class="st"><span class="dot ${!todos?'falla':(desfase?'aviso':'vivo')}"></span>${vivos.length}/${miembros.length} en marcha${desfase?' · desfase':''}</span></div>
+      <span class="st"><span class="dot ${sev}"></span>${R ? R.lbl : `${vivos.length}/${miembros.length} en marcha${desfase?' · desfase':''}`}</span></div>
     <div class="a-wb">
-      <div class="chips">${miembros.map(m => {
+      <div class="chips">${R ? R.chips : miembros.map(m => {
         const p = m.problems||{}; const k = p.offline ? 'offline' : m.state; const [cl, lb] = ESTADOS[k] || ['', k];
         const c = (m.values||{}).columna;
         return `<span class="chip"><span class="dot ${cl}"></span><span class="a-val">${esc(m.name||m.id)}</span>
           <span class="a-lbl">${lb}${c!==undefined && !p.offline ? ' · col '+esc(c) : ''}${m.id===s.coordinador?' · coordina':''}</span></span>`; }).join('')}</div>
-      <div class="a-row sala-info"><span>${colTxt}</span>
+      <div class="a-row sala-info"><span>${R ? R.colTxt : colTxt}</span>
         <span><span class="a-lbl">última sync</span> <span class="a-val">${syncs.length ? esc(syncs[syncs.length-1]) : '—'}</span>
         ${(s.horarios||[]).length ? ` · <span class="a-lbl">programada</span> <span class="a-val">${s.horarios.map(esc).join(' · ')}</span>` : ''}</span></div>
       <div class="btns">
-        <button class="a-btn primary" onclick="salaCmd('${sid}','sala_sync',null,'¿Sincronizar los ${miembros.length} servidores de «${esc(s.nombre)}»? Todas las pantallas vuelven a empezar.')">sincronizar sala</button>
+        <button class="a-btn primary" onclick="salaCmd('${sid}','sala_sync',null,'¿Sincronizar los ${R ? s.remotos.length : miembros.length} servidores de «${esc(s.nombre)}»? Todas las pantallas vuelven a empezar.')">sincronizar sala</button>
         ${(s.botones||[]).map((b,i) => `<button class="a-btn cue" onclick="salaCmd('${sid}','sala_boton',${i},'¿Mandar «${esc(b)}» a toda la sala?')">${esc(b)}</button>`).join('')}
       </div>
       ${ev.length ? `<div class="log sala-log">${ev.map(e => `<div class="l-${esc(e.level)}"><time>${hora(e.t)}</time><span class="a-lbl">${esc(e.quien)}</span> ${esc(e.msg.replace(/^Sala: /,''))}</div>`).join('')}</div>` : ''}

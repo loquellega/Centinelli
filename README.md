@@ -4,9 +4,9 @@
 
 Centinelli vigila la computadora de una instalación mientras tú no estás. Sabe si la pieza sigue viva, la reinicia si se cae o se congela y te avisa por Telegram. Desde el teléfono puedes verla en miniatura y mandarle comandos.
 
-Versión 0.4 · prototipo · Colección Alchemy of Meaning (Alquimia del Significado)
+Versión 0.5 · prototipo · Colección Alchemy of Meaning (Alquimia del Significado)
 
-![Panel de sala con 5 servidores Resolume](capturas/07-sala.png)
+![Sala de 5 Resolume vigilada desde el Server 1](capturas/09-server1.png)
 
 ## Qué hace
 
@@ -15,7 +15,7 @@ Versión 0.4 · prototipo · Colección Alchemy of Meaning (Alquimia del Signifi
 - **Reporta** fps, CPU, GPU, RAM, VRAM, temperatura, disco y los valores que mande la pieza (escena, jugadores; en Resolume: composición, BPM y clips conectados). Además manda una miniatura de la pantalla cada minuto.
 - **Recibe comandos** desde el dashboard: reiniciar la app (reiniciar la PC está desactivado por defecto), pedir una captura o mandar cualquier mensaje OSC a la pieza (cambiar de escena, disparar una columna de Arena).
 - **Botones de cue** por instalación («Sincronizar todo», «Columna 1», «Negro»), definidos en la máquina.
-- **Sincroniza varios Resolume sin TouchDesigner.** Los agentes de una *sala* se mandan entre ellos la secuencia Negro → Columna 2 → Columna 1: al encender, cuando un Arena se reabre, a ciertas horas o con un botón. El dashboard muestra la columna activa de cada server y avisa si hay desfase (ver [SALA.md](resolume/SALA.md)).
+- **Sincroniza varios Resolume sin TouchDesigner.** Los agentes de una *sala* se mandan entre ellos la secuencia Negro → Columna 2 → Columna 1: al encender, cuando un Arena se reabre, a ciertas horas o con un botón. El dashboard muestra la columna activa de cada server y avisa si hay desfase Puede ir **en una sola máquina** que vigila a las demás por el REST API de Resolume y sincroniza cuando todas terminaron de arrancar (ver [INSTALAR-SERVER1.md](INSTALAR-SERVER1.md) y [SALA.md](resolume/SALA.md)).
 - **Avisa** por Telegram o correo si una máquina pierde conexión, si la app falla más de 45 s o si el GPU se calienta. También avisa cuando se resuelve.
 - **No abre puertos.** La máquina sólo hace conexiones de salida por HTTPS, así que funciona detrás del firewall de museos y teatros.
 
@@ -39,7 +39,7 @@ resolume/        guía y config: latido por REST API, comandos por OSC
 
 ## Uso rápido
 
-Para una primera prueba en una sola computadora, sigue **[PRUEBA-LOCAL.md](PRUEBA-LOCAL.md)**.
+Para una primera prueba en una sola computadora, sigue **[PRUEBA-LOCAL.md](PRUEBA-LOCAL.md)**. Para una sala de varios Resolume con Centinelli sólo en el primer server, **[INSTALAR-SERVER1.md](INSTALAR-SERVER1.md)**.
 
 1. Sube `servidor/` a tu hosting, copia `config.example.php` como `config.php` y genera contraseña y token con `hash.php`.
 2. En la máquina: `pip install psutil mss pillow`, copia la plantilla de `agente/` que corresponda como `config.json` y ejecuta `python centinelli_agente.py config.json`.
@@ -65,7 +65,7 @@ Licencia GPL-3.0.
 
 Centinelli watches an installation computer while you are away. It knows whether the piece is still running, restarts it when it crashes or freezes, and alerts you on Telegram. From your phone you can see a thumbnail and send it commands.
 
-Version 0.4 · prototype · Alchemy of Meaning collection
+Version 0.5 · prototype · Alchemy of Meaning collection
 
 ### What it does
 

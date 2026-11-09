@@ -48,7 +48,7 @@ try:
 except ImportError:
     HAS_SCREEN = False
 
-VERSION = "0.4"
+VERSION = "0.5"
 
 
 # ───────────────────────────── OSC mínimo (sin dependencias) ─────────────────────────────
@@ -157,7 +157,22 @@ class Centinelli:
         # Sala: varios servidores (p.ej. 5 Resolume) que se sincronizan entre sí por OSC,
         # sin TouchDesigner. Cualquier agente de la sala puede mandar la secuencia a todos.
         self.sala = cfg.get("sala") or {}
-        self.sala_ips = [str(x).strip() for x in self.sala.get("servidores", []) if str(x).strip()]
+        # servidores: "192.168.1.12" o {"ip": "192.168.1.12", "nombre": "Server 2"}
+        self.sala_srv = []
+        for i, x in enumerate(self.sala.get("servidores", []), 1):
+            if isinstance(x, dict) and x.get("ip"):
+                self.sala_srv.append({"ip": str(x["ip"]).strip(), "nombre": x.get("nombre") or f"Server {i}"})
+            elif isinstance(x, str) and x.strip():
+                self.sala_srv.append({"ip": x.strip(), "nombre": f"Server {i}"})
+        self.sala_ips = [x["ip"] for x in self.sala_srv]
+        # Vigilar a los demás Resolume desde esta máquina, por su REST API (sin instalar nada en ellos)
+        self.vigilar = bool(self.sala.get("vigilar", False)) and bool(self.sala_srv)
+        self.api_port = int(self.sala.get("puerto_api", 8080))
+        self.remotos = {x["ip"]: {"nombre": x["nombre"], "ok": False, "desde": 0.0, "col": None,
+                                   "comp": None, "visto": 0.0} for x in self.sala_srv}
+        self.boot_sync_done = False      # ¿ya hubo una sincronización desde que arrancó el agente?
+        self.esperar_todos = bool(self.sala.get("esperar_a_todos", False)) and self.vigilar
+        self.boot_logged_wait = False
         self.sala_port = int(self.sala.get("puerto", 7000))
         self.sala_seq = self.sala.get("secuencia") or [
             {"address": "/composition/disconnectall", "args": [1]},
@@ -285,6 +300,7 @@ class Centinelli:
                 s.ioctl(socket.SIO_UDP_CONNRESET, False)
             except Exception:
                 pass
+            s.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)   # permite x.x.x.255
             s.sendto(osc_build(address, args), (host or self.app_host, int(port or self.app_port)))
         finally:
             s.close()
@@ -333,6 +349,7 @@ class Centinelli:
                 hora = time.strftime("%H:%M:%S")
                 with self.lock:
                     self.app_values["sync"] = hora
+                self.boot_sync_done = True
                 self.event("info" if todo_ok else "warn",
                            f"Sala: sincronización completa a las {hora} ({origen})")
             finally:
@@ -345,7 +362,92 @@ class Centinelli:
             self.sala_sync_why = why
             self.event("info", f"Sala: sincronización programada en {int(float(segundos))} s ({why})")
 
+    # ── vigilancia de los Resolume de la sala (REST API) ──
+    def _poll_remote(self, ip):
+        r = self.remotos[ip]
+        url = f"http://{ip}:{self.api_port}/api/v1/composition"
+        try:
+            with urllib.request.urlopen(url, timeout=3) as resp:
+                c = json.loads(resp.read().decode("utf-8", "replace"))
+            def val(d, k):
+                d = d.get(k) if isinstance(d, dict) else None
+                return d.get("value") if isinstance(d, dict) else d
+            cols = set()
+            capas = c.get("layers") or []
+            for layer in capas:
+                for j, clip in enumerate(layer.get("clips") or [], 1):
+                    if val(clip, "connected") in ("Connected", "Connected & previewing"):
+                        cols.add(j)
+            ok = True
+            col = ",".join(str(x) for x in sorted(cols)) if cols else "–"
+            comp = val(c, "name")
+            cargada = bool(capas)          # la composición ya tiene capas
+        except Exception:
+            ok, col, comp, cargada = False, None, None, False
+        now = time.time()
+        antes = r["ok"]
+        r.update(col=col if ok else r["col"], comp=comp if ok else r["comp"], cargada=cargada)
+        if ok:
+            r["visto"] = now
+        if ok != antes:
+            r["ok"] = ok
+            r["desde"] = now
+            if self.boot_sync_done:
+                if ok:
+                    self.event("info", f"Sala: {r['nombre']} ({ip}) responde de nuevo")
+                    self.sala_schedule(self.sala.get("sync_al_volver", 0), f"{r['nombre']} volvió")
+                else:
+                    self.event("warn", f"Sala: {r['nombre']} ({ip}) dejó de responder")
+            elif ok:
+                self.event("info", f"Sala: {r['nombre']} ({ip}) listo")
+
+    def remote_loop(self):
+        every = float(self.sala.get("vigilar_cada", 5))
+        self.event("info", f"Sala: vigilando {len(self.sala_srv)} Resolume por su REST API (puerto {self.api_port})")
+        while True:
+            hilos = [threading.Thread(target=self._poll_remote, args=(ip,), daemon=True) for ip in self.sala_ips]
+            for h in hilos:
+                h.start()
+            for h in hilos:
+                h.join(5)
+            time.sleep(every)
+
+    def remotos_report(self):
+        now = time.time()
+        out = []
+        for x in self.sala_srv:
+            r = self.remotos[x["ip"]]
+            if r["ok"]:
+                estado = "ok"
+            elif not self.boot_sync_done and not r["visto"]:
+                estado = "arrancando"
+            else:
+                estado = "caido"
+            out.append({"ip": x["ip"], "nombre": r["nombre"], "estado": estado, "col": r["col"],
+                        "comp": r["comp"], "desde": int(r["desde"]) if r["desde"] else None})
+        return out
+
+    def boot_tick(self):
+        """Sincronización de arranque del coordinador: cuando todos estén listos, o al tope."""
+        if self.boot_sync_done or not self.sala.get("coordinador") or not self.esperar_todos:
+            return
+        now = time.time()
+        listos = [r for r in self.remotos.values() if r["ok"] and r.get("cargada")]
+        margen = float(self.sala.get("margen", 30))
+        tope = float(self.sala.get("espera_maxima", 900))
+        if len(listos) == len(self.remotos) and all(now - r["desde"] >= margen for r in listos):
+            if not self.sala_busy.locked():
+                self.sala_sync(f"arranque: los {len(listos)} servidores listos")
+                self.boot_sync_done = True
+        elif now - self.t0 >= tope:
+            faltan = [r["nombre"] for r in self.remotos.values() if not r["ok"]]
+            self.event("warn", f"Sala: tope de espera ({int(tope)} s) alcanzado; sincronizo sin "
+                               + (", ".join(faltan) if faltan else "esperar más"))
+            self.sala_sync("arranque: tope de espera")
+            self.boot_sync_done = True
+
     def sala_tick(self):
+        self.boot_tick()
         now = time.time()
         if self.sala_sync_at and now >= self.sala_sync_at:
             self.sala_sync_at = 0.0
@@ -445,6 +547,9 @@ class Centinelli:
         return state, procs, beat_age
 
     def watchdog(self):
+        # Al encender, Windows abre la app por su cuenta: no la tocamos durante la gracia inicial
+        if time.time() - self.t0 < float(self.cfg.get("app", {}).get("espera_arranque", 0)):
+            return "iniciando"
         state, procs, beat_age = self.app_state()
         if self.paused or not self.autorestart:
             return state
@@ -607,6 +712,8 @@ class Centinelli:
             "allow_reboot": self.allow_reboot,
             "sala": ({"id": self.sala.get("id", "sala"), "nombre": self.sala.get("nombre", self.sala.get("id", "sala")),
                       "coordinador": bool(self.sala.get("coordinador")), "servidores": len(self.sala_ips),
+                      "remotos": self.remotos_report() if self.vigilar else None,
+                      "sync_hecha": self.boot_sync_done,
                       "botones": [b.get("label", b["address"]) for b in self.sala_buttons],
                       "horarios": self.sala.get("sync_horarios", [])}
                      if self.sala_ips else None),
@@ -648,8 +755,14 @@ class Centinelli:
         self.event("info", f"Centinelli {VERSION} iniciado en {socket.gethostname()}")
         if self.cfg.get("app", {}).get("start_on_boot") and not self.find_procs():
             self.start_app("al arrancar el agente")
+        if self.vigilar:
+            threading.Thread(target=self.remote_loop, daemon=True).start()
         if self.sala.get("coordinador"):
-            self.sala_schedule(self.sala.get("sync_al_arrancar", 0), "arranque de la sala")
+            if self.esperar_todos:
+                self.event("info", "Sala: espero a que los {} servidores respondan (margen {} s, tope {} s)".format(
+                    len(self.sala_srv), int(self.sala.get("margen", 30)), int(self.sala.get("espera_maxima", 900))))
+            else:
+                self.sala_schedule(self.sala.get("sync_al_arrancar", 0), "arranque de la sala")
         interval = self.cfg.get("interval", 30)
         poll = self.cfg.get("command_poll", 10)  # cada cuánto pregunta si hay comandos
         last_report = 0

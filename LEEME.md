@@ -1,6 +1,6 @@
 # Centinelli · guía de instalación
 
-Versión 0.4. **¿Primera vez? Empieza por [PRUEBA-LOCAL.md](PRUEBA-LOCAL.md).** Sirve para saber desde el teléfono si cada instalación está viva, verla en una miniatura, recibir un aviso por Telegram si algo falla y reiniciarla a distancia.
+Versión 0.5. **¿Primera vez? Empieza por [PRUEBA-LOCAL.md](PRUEBA-LOCAL.md).** Sirve para saber desde el teléfono si cada instalación está viva, verla en una miniatura, recibir un aviso por Telegram si algo falla y reiniciarla a distancia.
 
 ```
  Máquina de la instalación                          Tu hosting PHP
@@ -85,7 +85,7 @@ Ver `resolume/RESOLUME.md`. No necesita patch: el agente usa el REST API de Aren
 
 ## 6. Sala: varios Resolume sincronizados
 
-Varias máquinas con Arena se agrupan en una **sala** (bloque `sala` del `config.json`). Los agentes se mandan la secuencia de sincronización entre ellos: al encender (sólo el coordinador), cuando uno reabre Arena, a ciertas horas o con el botón del dashboard. No hace falta TouchDesigner. Guía completa en `resolume/SALA.md` y ejemplo en `agente/config.sala.json`.
+Varias máquinas con Arena se agrupan en una **sala** (bloque `sala` del `config.json`). Los agentes se mandan la secuencia de sincronización entre ellos: al encender (sólo el coordinador), cuando uno reabre Arena, a ciertas horas o con el botón del dashboard. No hace falta TouchDesigner. Dos variantes: **un solo agente en el primer server** que vigila a los demás por su REST API y sincroniza cuando todos arrancaron (`INSTALAR-SERVER1.md`, `agente/config.server1.json`), o un agente en cada server (`resolume/SALA.md`, `agente/config.sala.json`).
 
 ## 7. Botones de cue y acciones al reiniciar
 

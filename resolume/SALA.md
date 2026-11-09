@@ -1,5 +1,7 @@
 # Sala: sincronizar varios Resolume desde Centinelli, sin TouchDesigner
 
+> **Para el MHN usa [INSTALAR-SERVER1.md](../INSTALAR-SERVER1.md):** Centinelli sólo en el Server 1, que vigila y sincroniza a los otros 4 sin instalarles nada. Esta guía describe la variante con un agente en cada server (más datos por máquina: CPU, GPU, miniatura de cada una).
+
 Pensado para el caso del Museo de Historia Natural: **5 servidores con Resolume Arena** que tienen que arrancar sincronizados, mantenerse vivos y volver a sincronizarse si alguno se cae.
 
 ## La idea

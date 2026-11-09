@@ -1,0 +1,80 @@
+{
+  "id": "mhn-server1",
+  "name": "MHN Server 1",
+  "server": "https://hectorcruz.com.mx/centinelli/api.php",
+  "token": "CAMBIA-ESTE-TOKEN-por-el-de-config.php",
+
+  "interval": 30,
+  "command_poll": 5,
+
+  "app": {
+    "process": "Arena.exe",
+    "launch": ["C:/Program Files/Resolume Arena/Arena.exe", "D:/MHN/sala.avc"],
+    "start_on_boot": false,
+    "espera_arranque": 600,
+    "autorestart": true,
+    "restart_grace": 120,
+    "max_restarts_per_hour": 4
+  },
+
+  "http_heartbeat": {
+    "url": "http://127.0.0.1:8080/api/v1/composition",
+    "every": 5,
+    "timeout": 4,
+    "resolume": true
+  },
+
+  "osc": {
+    "listen_port": 9300,
+    "heartbeat_timeout": 30,
+    "heartbeat_is_fps": false,
+    "app_host": "127.0.0.1",
+    "app_port": 7000
+  },
+
+  "sala": {
+    "id": "mhn-inmersiva",
+    "nombre": "MHN · Sala inmersiva",
+    "coordinador": true,
+
+    "servidores": [
+      {"ip": "127.0.0.1",    "nombre": "Server 1"},
+      {"ip": "192.168.1.12", "nombre": "Server 2"},
+      {"ip": "192.168.1.13", "nombre": "Server 3"},
+      {"ip": "192.168.1.14", "nombre": "Server 4"},
+      {"ip": "192.168.1.15", "nombre": "Server 5"}
+    ],
+    "puerto": 7000,
+
+    "vigilar": true,
+    "puerto_api": 8080,
+    "vigilar_cada": 5,
+
+    "esperar_a_todos": true,
+    "margen": 60,
+    "espera_maxima": 900,
+    "sync_al_arrancar": 480,
+
+    "sync_al_reiniciar": 120,
+    "sync_al_volver": 90,
+    "sync_horarios": [],
+
+    "secuencia": [
+      {"address": "/composition/disconnectall", "args": [1]},
+      {"pausa": 1},
+      {"address": "/composition/columns/2/connect", "args": [1]},
+      {"pausa": 1},
+      {"address": "/composition/columns/1/connect", "args": [1]}
+    ],
+
+    "botones": [
+      {"label": "Columna 1", "address": "/composition/columns/1/connect", "args": [1]},
+      {"label": "Columna 2", "address": "/composition/columns/2/connect", "args": [1]},
+      {"label": "Negro", "address": "/composition/disconnectall", "args": [1]}
+    ]
+  },
+
+  "permitir_reinicio_pc": false,
+
+  "screenshot": { "enabled": true, "every": 60, "width": 480, "quality": 60 }
+}

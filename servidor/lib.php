@@ -79,6 +79,12 @@ function problems($st, $now = null) {
     if (($m['gpu_temp'] ?? 0) > $CFG['gpu_temp_max']) $p['gpu_temp'] = 'GPU caliente: ' . $m['gpu_temp'] . ' °C';
     if (($m['cpu_temp'] ?? 0) > $CFG['cpu_temp_max']) $p['cpu_temp'] = 'CPU caliente: ' . $m['cpu_temp'] . ' °C';
     if (($m['disk'] ?? 0) > $CFG['disk_max'])         $p['disk'] = 'Disco casi lleno: ' . $m['disk'] . ' %';
+    // Resolume de la sala vigilados desde esta máquina
+    foreach (($st['sala']['remotos'] ?? null) ?: [] as $r) {
+        if (($r['estado'] ?? '') === 'caido') {
+            $p['remoto_' . preg_replace('/\W/', '_', $r['ip'] ?? '')] = ($r['nombre'] ?? $r['ip']) . ' (' . ($r['ip'] ?? '') . ') no responde';
+        }
+    }
     return $p;
 }
 
@@ -151,6 +157,8 @@ function salas($items = null) {
         $out[$sid]['miembros'][] = $st['id'];
         if (!empty($s['coordinador'])) {
             $out[$sid]['coordinador'] = $st['id'];
+            $out[$sid]['remotos'] = $s['remotos'] ?? null;
+            $out[$sid]['sync_hecha'] = $s['sync_hecha'] ?? null;
             $out[$sid]['botones'] = $s['botones'] ?? [];
             $out[$sid]['horarios'] = $s['horarios'] ?? [];
         } elseif (!$out[$sid]['botones']) {
