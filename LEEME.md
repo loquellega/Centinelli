@@ -1,6 +1,6 @@
 # Centinelli · guía de instalación
 
-Versión 0.6. **¿Primera vez? Empieza por [PRUEBA-LOCAL.md](PRUEBA-LOCAL.md).** Sirve para saber desde el teléfono si cada instalación está viva, verla en una miniatura, recibir un aviso por Telegram si algo falla y reiniciarla a distancia.
+Versión 0.6. **¿Primera vez? Instalación guiada en [INSTALAR.md](INSTALAR.md) y prueba en [PRUEBA-LOCAL.md](PRUEBA-LOCAL.md).** Esta guía describe la instalación manual y los detalles técnicos. Sirve para saber desde el teléfono si cada instalación está viva, verla en una miniatura, recibir un aviso por Telegram si algo falla y reiniciarla a distancia.
 
 ```
  Máquina de la instalación                          Tu hosting PHP

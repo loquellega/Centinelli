@@ -939,9 +939,23 @@ class Centinelli:
             time.sleep(2)
 
 
+def _log_a_archivo(carpeta):
+    """Con pythonw (sin ventana) no hay consola: todo va a centinelli.log, con rotación a 5 MB."""
+    ruta = os.path.join(carpeta, "centinelli.log")
+    try:
+        if os.path.exists(ruta) and os.path.getsize(ruta) > 5 * 1024 * 1024:
+            os.replace(ruta, ruta + ".1")
+    except OSError:
+        pass
+    f = open(ruta, "a", encoding="utf-8", buffering=1)
+    sys.stdout = sys.stderr = f
+
+
 def main():
-    path = sys.argv[1] if len(sys.argv) > 1 else os.path.join(os.path.dirname(__file__), "config.json")
-    with open(path, encoding="utf-8") as f:
+    path = sys.argv[1] if len(sys.argv) > 1 else os.path.join(os.path.dirname(os.path.abspath(__file__)), "config.json")
+    if sys.stdout is None or os.path.basename(sys.executable).lower() == "pythonw.exe":
+        _log_a_archivo(os.path.dirname(os.path.abspath(path)))
+    with open(path, encoding="utf-8-sig") as f:
         cfg = json.load(f)
     cfg["_ruta"] = os.path.abspath(path)
     for k in ("server", "token", "id"):

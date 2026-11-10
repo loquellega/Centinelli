@@ -195,6 +195,7 @@ body.mural .ctl{display:none}
   <span class="sum" id="sum" aria-live="polite">…</span>
   <button class="a-btn" id="b-mural" aria-pressed="false" title="Modo mural: sólo visores (tecla h)">mural</button>
   <button class="a-btn" id="b-alto" aria-pressed="false" title="Contraste alto (tecla c)">alto</button>
+  <a class="a-btn" href="instalar.php" style="display:inline-grid;place-items:center;text-decoration:none">instalar</a>
   <a class="a-btn" href="?salir" style="display:inline-grid;place-items:center;text-decoration:none">salir</a>
 </nav>
 <div id="toast" role="status"></div>

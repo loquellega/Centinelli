@@ -35,6 +35,8 @@ En **cada** server (1 a 5):
 
 Para comprobarlo desde el Server 1, abre en el navegador `http://192.168.1.12:8080`. Si sale la página de Resolume, ese server está listo para que lo vigilen. Repite con .13, .14 y .15.
 
+> **Atajo:** los pasos 2 a 5 los hace solo el instalador. En el dashboard ▸ **instalar**, copia el comando, pégalo en PowerShell (Administrador) del Server 1 y elige la opción **1**. También puede ser desde una USB con `INSTALAR.bat`. Ver [INSTALAR.md](INSTALAR.md). Lo que sigue es el camino manual.
+
 ## Paso 2 · Python en el Server 1
 
 1. Descarga Python 3 de python.org (Windows installer, 64-bit).

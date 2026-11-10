@@ -1,6 +1,6 @@
 # Centinelli · cómo usarlo
 
-Guía de uso diario, para ti y para el técnico de sala. Para instalarlo, ver `INSTALAR-SERVER1.md` (sala MHN) o `PRUEBA-LOCAL.md` (prueba en una computadora).
+Guía de uso diario, para ti y para el técnico de sala. Para instalarlo, ver `INSTALAR.md`. El dashboard tiene un botón **instalar** con el comando listo.
 
 Versión 0.6 · Colección Alchemy of Meaning (Alquimia del Significado)
 
@@ -30,6 +30,7 @@ La página se actualiza sola cada 8 segundos. No hace falta recargarla.
 - **1 con fallas** (en rojo): una tarjeta tiene problemas. La pestaña del navegador también lo muestra: `(1) Centinelli`.
 - **mural:** deja sólo los visores y las lecturas, sin botones. Sirve para una pantalla de monitoreo fija. Tecla `h`.
 - **alto:** contraste alto, blanco sobre negro, para pantallas con mucha luz. Tecla `c`.
+- **instalar:** el comando y el token para instalar Centinelli en otra máquina.
 - **salir:** cierra la sesión.
 
 ### Panel de sala

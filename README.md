@@ -48,7 +48,7 @@ Para una primera prueba en una sola computadora, sigue **[PRUEBA-LOCAL.md](PRUEB
 2. En la máquina: `pip install psutil mss pillow`, copia la plantilla de `agente/` que corresponda como `config.json` y ejecuta `python centinelli_agente.py config.json`.
 3. En la pieza: el COMP de TouchDesigner, la escena de latido de Isadora o el webserver de Arena.
 
-**Uso diario (dashboard, botones, avisos): [USO.md](USO.md).** La guía completa de instalación está en **[LEEME.md](LEEME.md)**. Incluye la lista para dejar una máquina funcionando sola: BIOS, Windows, no-break y acceso de emergencia.
+**Instalación (por link, USB o manual): [INSTALAR.md](INSTALAR.md).** **Uso diario (dashboard, botones, avisos): [USO.md](USO.md).** La guía completa de instalación está en **[LEEME.md](LEEME.md)**. Incluye la lista para dejar una máquina funcionando sola: BIOS, Windows, no-break y acceso de emergencia.
 
 ## Estado
 

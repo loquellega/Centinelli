@@ -1,7 +1,10 @@
 @echo off
-rem Corre el agente y lo relanza si se llega a cerrar.
+rem Corre el agente a mano, con ventana, para ver qué hace (Ctrl+C para salir).
+rem El arranque automático no usa este archivo: lo registra INSTALAR.bat (sin ventana).
 cd /d "%~dp0"
-:loop
-python centinelli_agente.py config.json >> centinelli.log 2>&1
-timeout /t 5 /nobreak >nul
-goto loop
+if exist "%~dp0python\python.exe" (
+  "%~dp0python\python.exe" centinelli_agente.py config.json
+) else (
+  python centinelli_agente.py config.json
+)
+pause
